@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>夜の輪郭 — AFTER HOURS</title>
+  <meta name="description" content="街が眠っても、光はつづく。12枚の夜景を巡るバーチャル写真展。">
+  <meta name="theme-color" content="#101a1b">
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#index-button">作品一覧へ</a>
+  <main id="gallery" class="gallery welcome">
+    <div id="scene" class="scene" aria-label="白い壁に12枚の夜景が並ぶ展示室"></div><div class="scene-shade" aria-hidden="true"></div>
+    <header class="site-header">
+      <button class="brand" id="home-button" aria-label="展示室の入口へ"><span class="brand-mark" aria-hidden="true">ah.</span><span class="brand-name">AFTER HOURS<span>夜の輪郭</span></span></button>
+      <div class="header-actions"><span class="edition">NIGHT PHOTOGRAPHY · 12 WORKS</span><button class="outline-button" id="index-button"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 3h5v5H3zM12 3h5v5h-5zM3 12h5v5H3zM12 12h5v5h-5z"/></svg>作品一覧<span class="button-count">12</span></button></div>
+    </header>
+    <section class="intro" id="intro" aria-labelledby="exhibition-title">
+      <p class="eyebrow"><span></span>A VIRTUAL PHOTO EXHIBITION</p><h1 id="exhibition-title">After<br><em>hours.</em></h1>
+      <div class="intro-caption"><p class="japanese-title">夜の輪郭</p><p>街が眠っても、光はつづく。</p></div>
+      <button id="enter-button" class="enter-button" disabled><span id="enter-text">展示室を準備中</span><span class="enter-arrow" aria-hidden="true">↗</span></button>
+      <p class="intro-help" id="load-status" role="status">写真を読み込んでいます</p>
+    </section>
+    <div class="intro-note"><span>TWELVE FRAGMENTS<br>OF THE NIGHT.</span><span class="note-line"></span><span>ONLINE<br>EXHIBITION</span></div>
+    <section id="tour-ui" class="tour-ui" hidden aria-label="展示室の操作">
+      <div class="room-caption"><span class="eyebrow">THE EXHIBITION</span><h2 id="current-title">夜の輪郭</h2><p id="current-subtitle">気になる写真をタップして、その前へ。</p></div>
+      <button class="focus-button" id="view-button" hidden>写真を大きく見る <span aria-hidden="true">↗</span></button>
+      <div class="map-card" id="map-card"><button class="map-heading" id="map-toggle" aria-expanded="true" aria-controls="room-map">FLOOR PLAN <span aria-hidden="true">−</span></button><div id="room-map" class="room-map"></div><span class="map-caption">番号を選んで移動</span></div>
+      <nav class="tour-dock" aria-label="作品を巡る">
+        <button id="previous-button" class="nav-arrow" aria-label="前の作品へ" disabled>←</button>
+        <div class="tour-position"><span id="work-counter">ROOM VIEW</span><span id="work-label">展示室を見渡す</span></div>
+        <button id="next-button" class="nav-arrow" aria-label="最初の作品へ">→</button><span class="dock-divider"></span>
+        <button id="overview-button" class="dock-button" aria-label="展示室全体を見渡す"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9 5-9-5"/></svg><span>全体</span></button>
+        <button id="motion-button" class="dock-button" aria-pressed="false" aria-label="動きを減らす"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M8 4v4m8 2v4m-6 2v4"/></svg><span>動き</span></button>
+      </nav>
+      <p class="gesture-hint">ドラッグで見回す <span>·</span> 写真をタップで移動</p>
+    </section>
+    <div id="notice" class="notice" role="status" hidden></div>
+    <noscript><div class="noscript">3D展示にはJavaScriptが必要です。<a href="./photos.html">12枚の写真を見る</a></div></noscript>
+  </main>
+  <dialog id="index-dialog" class="index-dialog" aria-labelledby="index-title">
+    <div class="dialog-header"><div><p class="eyebrow">THE COLLECTION</p><h2 id="index-title">12の夜景</h2></div><button class="close-button" data-close="index-dialog" aria-label="作品一覧を閉じる">×</button></div>
+    <p class="index-description">気になる一枚から、夜を巡る。</p><div id="works-grid" class="works-grid"></div><footer class="index-footer">AFTER HOURS — 夜の輪郭<span>01 — 12</span></footer>
+  </dialog>
+  <dialog id="viewer-dialog" class="viewer-dialog" aria-labelledby="viewer-title">
+    <div class="viewer-header"><div><span class="eyebrow">AFTER HOURS</span><h2 id="viewer-title">作品 01</h2></div><div class="viewer-actions"><button id="zoom-button" class="text-button" aria-pressed="false">拡大する ＋</button><button class="close-button" data-close="viewer-dialog" aria-label="写真を閉じる">×</button></div></div>
+    <div class="viewer-stage" id="viewer-stage"><img id="viewer-image" alt=""><p id="viewer-error" hidden role="alert">写真を読み込めませんでした。<button id="retry-image">再読み込み</button></p></div>
+    <footer class="viewer-footer"><button id="viewer-prev" class="nav-arrow" aria-label="前の写真">←</button><div><span id="viewer-count">01 / 12</span><span class="viewer-size" id="viewer-size">A2 PRINT</span></div><button id="viewer-next" class="nav-arrow" aria-label="次の写真">→</button></footer>
+  </dialog>
+</body></html>
