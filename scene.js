@@ -1,5 +1,5 @@
 import * as THREE from './vendor/three.module.min.js';
-import { room, printSize, fittedImage, placement } from './config.js';
+import { room, printSize, fittedImage, placement } from './config.js?v=20260911-1';
 
 // The room is authored in metres; artwork paper sizes are true A2.
 export async function createGalleryScene(container, works, callbacks = {}) {
@@ -17,7 +17,6 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   canvas.tabIndex = 0;
   canvas.setAttribute('aria-label','3D展示室。ドラッグで見回す。左右の矢印キーで作品を巡る。');
   container.appendChild(canvas);
-  let reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let entered = false, selected = -1, raf = 0, tween = null, suspended = false, lost = false;
   const disposables = [], hitTargets = [], occluders = [];
   function requestFrame() { if (!raf && !suspended && !lost) raf = requestAnimationFrame(render); }
@@ -143,7 +142,7 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   function cameraQuaternion(position,target){const c=new THREE.PerspectiveCamera();c.position.copy(position);c.lookAt(target);return c.quaternion.clone();}
   function moveTo(position,target,immediate=false){
     const to=new THREE.Vector3(...position),qTo=cameraQuaternion(to,new THREE.Vector3(...target));
-    if(reduced||immediate){tween=null;camera.position.copy(to);camera.quaternion.copy(qTo);callbacks.onSettled?.(selected);}else tween={from:camera.position.clone(),to,qFrom:camera.quaternion.clone(),qTo,start:performance.now(),duration:1100};
+    if(immediate){tween=null;camera.position.copy(to);camera.quaternion.copy(qTo);callbacks.onSettled?.(selected);}else tween={from:camera.position.clone(),to,qFrom:camera.quaternion.clone(),qTo,start:performance.now(),duration:1100};
     requestFrame();
   }
   function overview(immediate=false){selected=-1;moveTo([.72,1.64,l/2-.42],[-.3,1.3,-1.8],immediate);}
@@ -178,7 +177,6 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   await Promise.all(loadTasks);
   requestFrame();
   return {focus,overview,enter(){entered=true;overview();},home(){entered=false;overview();},
-    setReduced(value){reduced=value;if(reduced&&tween){camera.position.copy(tween.to);camera.quaternion.copy(tween.qTo);tween=null;callbacks.onSettled?.(selected);requestFrame();}},
     setSuspended(value){suspended=value;if(!suspended)requestFrame();},
     dispose(){observer.disconnect();cancelAnimationFrame(raf);disposables.forEach(x=>x.dispose());renderer.dispose();canvas.remove();},
   };

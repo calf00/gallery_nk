@@ -3,6 +3,21 @@ export const exhibition = { title: '鳥瞰図', englishTitle: 'AFTER HOURS' };
 export const room = { width:4.6, length:9.4, height:2.95, columnDepth:.24, columnWidth:.32,
   columns:[2.45,.05,-2.75], slots:[3.4,1.75,.85,-.95,-1.85,-3.7], seats:[1.55,.9,-1.4,-2.05], hangingHeight:1.5 };
 export const files=['P1000523.JPG','P1011571.jpg','P1011578.jpg','IMG_8814.JPG','P1011576.jpg','P1011437.jpg','P1011820.jpg','P1011815.JPG','P1011828.JPG','P1011541.JPEG','P1011579.JPEG','P1011801.JPG'];
+// 作品 01〜12 の場所。各行の「東京」を編集すると、作品名の下に反映されます。
+export const locations=[
+  '東京', // 01
+  '東京', // 02
+  '東京', // 03
+  '東京', // 04
+  '東京', // 05
+  '東京', // 06
+  '東京', // 07
+  '東京', // 08
+  '東京', // 09
+  '東京', // 10
+  '東京', // 11
+  '東京', // 12
+];
 export const descriptions=[
   '青い夜の大通りを、オレンジと白の光跡が伸びる。',
   '斜め上空から見下ろした交差点と、重なり合う街の明かり。',

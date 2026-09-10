@@ -1,11 +1,9 @@
-import { exhibition, room, placement, descriptions } from './config.js';
+import { exhibition, room, placement, descriptions, locations } from './config.js?v=20260911-1';
 const $=id=>document.getElementById(id);
 const gallery=$('gallery'), indexDialog=$('index-dialog'), viewer=$('viewer-dialog');
 const pad=n=>String(n).padStart(2,'0');
 let works=[], scene=null, selected=-1, viewerIndex=0, entered=false, sceneFailed=false;
-let reduced=matchMedia('(prefers-reduced-motion: reduce)').matches, noticeTimer;
-try { const stored=localStorage.getItem('after-hours-reduced-motion');if(stored!==null)reduced=stored==='true'; } catch {}
-$('motion-button').setAttribute('aria-pressed',String(reduced));
+let noticeTimer;
 function announce(text){$('notice').textContent=text;$('notice').hidden=false;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>{$('notice').hidden=true;},4200);}
 function syncSuspend(){scene?.setSuspended(document.hidden||indexDialog.open||viewer.open);}
 function showIndex(){if(!works.length){location.href='./photos.html';return;}indexDialog.showModal();syncSuspend();}
@@ -28,7 +26,7 @@ $('home-button').addEventListener('click',()=>{
 function updateSelection(index){
   selected=index;const has=index>=0;
   $('current-title').textContent=has?`作品 ${pad(index+1)}`:exhibition.title;
-  $('current-subtitle').textContent=has?'写真を選んで、光の細部まで。':'気になる写真をタップして、その前へ。';
+  $('current-subtitle').textContent=has?locations[index]:'気になる写真をタップして、その前へ。';
   $('work-counter').textContent=has?`${pad(index+1)} / 12`:'ROOM VIEW';
   $('work-label').textContent=has?`A2 · ${works[index].orientation==='portrait'?'縦位置':'横位置'}`:'展示室を見渡す';
   $('previous-button').disabled=index<=0;$('next-button').disabled=index>=works.length-1;
@@ -48,11 +46,6 @@ $('next-button').addEventListener('click',()=>selectWork(selected+1));
 $('previous-button').addEventListener('click',()=>selectWork(selected-1));
 $('overview-button').addEventListener('click',()=>{updateSelection(-1);scene?.overview();});
 $('view-button').addEventListener('click',()=>{if(selected>=0)openViewer(selected);});
-$('motion-button').addEventListener('click',()=>{
-  reduced=!reduced;scene?.setReduced(reduced);$('motion-button').setAttribute('aria-pressed',String(reduced));
-  try{localStorage.setItem('after-hours-reduced-motion',String(reduced));}catch{}
-  announce(reduced?'カメラの移動アニメーションを省きます。':'カメラがなめらかに移動します。');
-});
 function toggleMap(force){const expanded=force??$('map-toggle').getAttribute('aria-expanded')!=='true';$('map-toggle').setAttribute('aria-expanded',String(expanded));$('room-map').hidden=!expanded;$('map-card').classList.toggle('collapsed',!expanded);$('map-toggle').querySelector('span').textContent=expanded?'−':'＋';}
 $('map-toggle').addEventListener('click',()=>toggleMap());
 if(matchMedia('(max-width:700px), (max-height:650px)').matches)toggleMap(false);
@@ -97,7 +90,7 @@ async function init(){
     const response=await fetch('./assets/manifest.json');if(!response.ok)throw new Error('manifest');works=await response.json();if(works.length!==12)throw new Error('count');buildCollection();
     const slow=setTimeout(()=>{$('load-status').textContent='読み込み中です。右上の作品一覧からも鑑賞できます。';},10000);
     try{
-      const {createGalleryScene}=await import('./scene.js');
+      const {createGalleryScene}=await import('./scene.js?v=20260911-1');
       scene=await createGalleryScene($('scene'),works,{
         onProgress(n,total){$('load-status').textContent=`展示室を準備中 ${n} / ${total}`;},
         onSelect:i=>selectWork(i),
@@ -106,7 +99,7 @@ async function init(){
         onContextLost(){sceneFailed=true;announce('3D表示が中断しました。作品一覧から写真を見られます。');},
         onContextRestored(){sceneFailed=false;announce('3D表示が復帰しました。');},
       });
-      scene.setReduced(reduced);syncSuspend();$('enter-button').disabled=false;$('enter-text').textContent='展示室に入る';$('load-status').textContent='お好きなペースで、ごゆっくり。';
+      syncSuspend();$('enter-button').disabled=false;$('enter-text').textContent='展示室に入る';$('load-status').textContent='お好きなペースで、ごゆっくり。';
     }catch(error){console.error('3D gallery unavailable:',error);fallback('この端末では写真一覧でお楽しみください。');}finally{clearTimeout(slow);}
   }catch(error){console.error('Gallery loading failed:',error);fallback('写真一覧を開いてお楽しみください。');}
 }
