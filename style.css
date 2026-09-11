@@ -24,6 +24,10 @@
  .room-caption h2{font-size:21px;margin:4px 0 0}
 }
 
+/* Hide the upper-left branding and caption after entering the gallery. */
+.entered .brand,.entered .room-caption{display:none}
+.entered .header-actions{margin-left:auto}
+
 /* The doorway is the first screen's focal point; keep its centre unobstructed. */
 .welcome .scene-shade{background:linear-gradient(0deg,rgba(8,17,18,.87),transparent 30%,transparent 76%,rgba(8,17,18,.5))}
 .welcome .intro{left:4%;right:auto;top:auto;bottom:38px;max-width:310px;pointer-events:none;transition:opacity .4s,transform .6s}
