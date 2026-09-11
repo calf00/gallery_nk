@@ -23,3 +23,35 @@
  .room-caption{top:90px;bottom:auto;max-width:210px}
  .room-caption h2{font-size:21px;margin:4px 0 0}
 }
+
+/* The doorway is the first screen's focal point; keep its centre unobstructed. */
+.welcome .scene-shade{background:linear-gradient(0deg,rgba(8,17,18,.87),transparent 30%,transparent 76%,rgba(8,17,18,.5))}
+.welcome .intro{left:4%;right:auto;top:auto;bottom:38px;max-width:310px;pointer-events:none;transition:opacity .4s,transform .6s}
+.welcome .intro>.eyebrow{font-size:12px;letter-spacing:.12em}
+.welcome .intro h1{font-size:42px;line-height:1;letter-spacing:-.04em;margin:13px 0}
+.welcome .intro h1 br{display:none}
+.welcome .intro h1 em{margin-left:.2em}
+.welcome .intro-caption{border:0;padding:0;margin-bottom:20px}
+.welcome .japanese-title{font-size:21px;letter-spacing:.22em;margin-bottom:7px}
+.welcome .intro-caption p+p{font-size:14px}
+.welcome .enter-button{pointer-events:auto;min-height:52px;width:220px;background:rgba(220,230,183,.92)}
+.welcome .intro-help{font-size:13px;line-height:1.6;margin-top:10px}
+.welcome .intro-note{right:4%;bottom:38px;font-size:12px}
+.entering .intro{opacity:0;transform:translateY(12px);pointer-events:none}
+.entering .intro-note{opacity:0}
+.entering .scene-shade{background:linear-gradient(0deg,rgba(8,17,18,.25),transparent 25%,transparent 76%,rgba(8,17,18,.4))}
+.entry-status{position:absolute;left:50%;bottom:35px;transform:translateX(-50%);color:#eef0e8;font-size:14px;letter-spacing:.15em;white-space:nowrap;text-shadow:0 1px 10px #101a1b}
+@media(max-width:700px){
+ .welcome .intro{left:22px;right:22px;bottom:max(24px,env(safe-area-inset-bottom));max-width:none;display:grid;grid-template-columns:1fr auto;gap:0 15px;align-items:end}
+ .welcome .intro>.eyebrow,.welcome .intro h1,.welcome .intro-caption p+p,.welcome .intro-note{display:none}
+ .welcome .intro-caption{grid-column:1;grid-row:1;margin:0;align-self:center}
+ .welcome .japanese-title{font-size:22px;margin:0}
+ .welcome .enter-button{grid-column:2;grid-row:1;width:200px;font-size:14px}
+ .welcome .intro-help{grid-column:1/-1;text-align:right;margin-top:12px;font-size:13px}
+}
+@media(max-width:380px){.welcome .intro{left:16px;right:16px;gap:0 8px}.welcome .japanese-title{font-size:18px}.welcome .enter-button{width:180px;padding:0 15px}}
+@media(max-height:600px) and (min-width:701px){
+ .welcome .intro{bottom:23px;left:25px;max-width:230px;display:block}
+ .welcome .intro h1{font-size:30px;margin:8px 0}.welcome .intro>.eyebrow{display:none}
+ .welcome .intro-caption{margin:12px 0}.welcome .intro-note{display:none}
+}

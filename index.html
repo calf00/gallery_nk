@@ -5,13 +5,13 @@
   <title>鳥瞰図 — Online Gallery</title>
   <meta name="description" content="街が眠っても、光はつづく。12枚の夜景を巡るバーチャル写真展。">
   <meta name="theme-color" content="#101a1b">
-  <link rel="icon" href="./favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="./style.css?v=20260911-1">
-  <script type="module" src="./app.js?v=20260911-1"></script>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="./style.css?v=20260911-entry">
+  <script type="module" src="./app.js?v=20260911-entry"></script>
 </head>
 <body>
   <a class="skip-link" href="#index-button">作品一覧へ</a>
   <main id="gallery" class="gallery welcome">
-    <div id="scene" class="scene" aria-label="白い壁に12枚の夜景が並ぶ展示室"></div><div class="scene-shade" aria-hidden="true"></div>
+    <div id="scene" class="scene" aria-label="ガラスの入口と、白い壁に12枚の夜景が並ぶ展示室"></div><div class="scene-shade" aria-hidden="true"></div>
     <header class="site-header">
       <button class="brand" id="home-button" aria-label="展示室の入口へ"><span class="brand-mark" aria-hidden="true">nk.</span><span class="brand-name">NAGATA KOSHI<span>鳥瞰図</span></span></button>
       <div class="header-actions"><span class="edition">NIGHT PHOTOGRAPHY · 12 WORKS</span><button class="outline-button" id="index-button"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 3h5v5H3zM12 3h5v5h-5zM3 12h5v5H3zM12 12h5v5h-5z"/></svg>作品一覧<span class="button-count">12</span></button></div>
@@ -23,6 +23,7 @@
       <p class="intro-help" id="load-status" role="status">写真を読み込んでいます</p>
     </section>
     <div class="intro-note"><span>TWELVE FRAGMENTS<br>OF THE NIGHT.</span><span class="note-line"></span><span>ONLINE<br>EXHIBITION</span></div>
+    <p class="entry-status" id="entry-status" role="status" hidden>写真展へ、ようこそ。</p>
     <section id="tour-ui" class="tour-ui" hidden aria-label="展示室の操作">
       <div class="room-caption"><span class="eyebrow">THE EXHIBITION</span><h2 id="current-title">鳥瞰図</h2><p id="current-subtitle">気になる写真をタップして、その前へ。</p></div>
       <button class="focus-button" id="view-button" hidden>写真を大きく見る <span aria-hidden="true">↗</span></button>

@@ -1,8 +1,8 @@
-import { exhibition, room, placement, descriptions, locations } from './config.js?v=20260911-1';
+import { exhibition, room, placement, descriptions, locations } from './config.js?v=20260911-entry';
 const $=id=>document.getElementById(id);
 const gallery=$('gallery'), indexDialog=$('index-dialog'), viewer=$('viewer-dialog');
 const pad=n=>String(n).padStart(2,'0');
-let works=[], scene=null, selected=-1, viewerIndex=0, entered=false, sceneFailed=false;
+let works=[], scene=null, selected=-1, viewerIndex=0, entered=false, entering=false, sceneFailed=false;
 let noticeTimer;
 function announce(text){$('notice').textContent=text;$('notice').hidden=false;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>{$('notice').hidden=true;},4200);}
 function syncSuspend(){scene?.setSuspended(document.hidden||indexDialog.open||viewer.open);}
@@ -15,13 +15,24 @@ for(const dialog of [indexDialog,viewer]) {
 }
 document.addEventListener('visibilitychange',syncSuspend);
 function enter(){
+  if(entered||entering)return;
   if(sceneFailed||!scene){showIndex();return;}
-  entered=true;gallery.classList.add('entered');gallery.classList.remove('welcome');$('tour-ui').hidden=false;
-  $('intro').inert=true;scene.enter();updateSelection(-1);$('next-button').focus({preventScroll:true});
+  entering=true;gallery.classList.add('entering');$('intro').inert=true;
+  $('enter-button').disabled=true;$('index-button').disabled=true;
+  $('entry-status').hidden=false;scene.enter();
+}
+function finishEntry(){
+  if(!entering)return;
+  entering=false;entered=true;gallery.classList.add('entered');gallery.classList.remove('welcome','entering');
+  $('tour-ui').hidden=false;$('entry-status').hidden=true;$('index-button').disabled=false;
+  updateSelection(-1);$('next-button').focus({preventScroll:true});
 }
 $('enter-button').addEventListener('click',enter);
 $('home-button').addEventListener('click',()=>{
-  entered=false;selected=-1;gallery.classList.remove('entered');gallery.classList.add('welcome');$('tour-ui').hidden=true;$('intro').inert=false;scene?.home();$('enter-button').focus({preventScroll:true});
+  entered=false;entering=false;selected=-1;gallery.classList.remove('entered','entering');gallery.classList.add('welcome');
+  $('tour-ui').hidden=true;$('entry-status').hidden=true;$('intro').inert=false;
+  $('enter-button').disabled=!scene&&!sceneFailed;$('index-button').disabled=false;
+  scene?.home();$('enter-button').focus({preventScroll:true});
 });
 function updateSelection(index){
   selected=index;const has=index>=0;
@@ -37,7 +48,8 @@ function updateSelection(index){
 function selectWork(index,{open=false}={}){
   if(!Number.isInteger(index)||index<0||index>=works.length)return;
   if(!scene||sceneFailed){openViewer(index);return;}
-  if(!entered)enter();
+  if(entering)return;
+  if(!entered){openViewer(index);return;}
   const same=selected===index;
   updateSelection(index);scene.focus(index);
   if(open||same)openViewer(index);
@@ -73,7 +85,7 @@ function displayPhoto(index){
   $('viewer-prev').disabled=index===0;$('viewer-next').disabled=index===works.length-1;
 }
 function openViewer(index){displayPhoto(index);if(!viewer.open)viewer.showModal();syncSuspend();}
-function stepViewer(delta){const index=viewerIndex+delta;if(index<0||index>=works.length)return;displayPhoto(index);if(scene&&!sceneFailed){updateSelection(index);scene.focus(index,true);}}
+function stepViewer(delta){const index=viewerIndex+delta;if(index<0||index>=works.length)return;displayPhoto(index);if(entered&&scene&&!sceneFailed){updateSelection(index);scene.focus(index,true);}}
 $('viewer-prev').addEventListener('click',()=>stepViewer(-1));$('viewer-next').addEventListener('click',()=>stepViewer(1));
 $('viewer-image').addEventListener('error',()=>{$('viewer-error').hidden=false;$('viewer-image').hidden=true;});
 $('retry-image').addEventListener('click',()=>displayPhoto(viewerIndex));
@@ -90,16 +102,18 @@ async function init(){
     const response=await fetch('./assets/manifest.json');if(!response.ok)throw new Error('manifest');works=await response.json();if(works.length!==12)throw new Error('count');buildCollection();
     const slow=setTimeout(()=>{$('load-status').textContent='読み込み中です。右上の作品一覧からも鑑賞できます。';},10000);
     try{
-      const {createGalleryScene}=await import('./scene.js?v=20260911-1');
+      const {createGalleryScene}=await import('./scene.js?v=20260911-entry');
       scene=await createGalleryScene($('scene'),works,{
         onProgress(n,total){$('load-status').textContent=`展示室を準備中 ${n} / ${total}`;},
+        onEnterRequest:enter,
+        onEntered:finishEntry,
         onSelect:i=>selectWork(i),
         onSettled:i=>{if(entered&&i>=0&&i===selected)$('view-button').hidden=false;},
         onTextureError(){announce('一部の写真は、作品一覧からお楽しみください。');},
-        onContextLost(){sceneFailed=true;announce('3D表示が中断しました。作品一覧から写真を見られます。');},
+        onContextLost(){sceneFailed=true;if(entering){scene.home();entering=false;gallery.classList.remove('entering');$('intro').inert=false;$('entry-status').hidden=true;$('enter-button').disabled=false;$('index-button').disabled=false;}announce('3D表示が中断しました。作品一覧から写真を見られます。');},
         onContextRestored(){sceneFailed=false;announce('3D表示が復帰しました。');},
       });
-      syncSuspend();$('enter-button').disabled=false;$('enter-text').textContent='展示室に入る';$('load-status').textContent='お好きなペースで、ごゆっくり。';
+      syncSuspend();$('enter-button').disabled=false;$('enter-text').textContent='扉を開けて入る';$('load-status').textContent='扉をクリックして、写真展へ。';
     }catch(error){console.error('3D gallery unavailable:',error);fallback('この端末では写真一覧でお楽しみください。');}finally{clearTimeout(slow);}
   }catch(error){console.error('Gallery loading failed:',error);fallback('写真一覧を開いてお楽しみください。');}
 }

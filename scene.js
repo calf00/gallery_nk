@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three.module.min.js';
-import { room, printSize, fittedImage, placement } from './config.js?v=20260911-1';
+import { room, printSize, fittedImage, placement } from './config.js?v=20260911-entry';
+import { entrance, createEntryPath, sampleEntry } from './entry-path.js?v=20260911-entry';
 
 // The room is authored in metres; artwork paper sizes are true A2.
 export async function createGalleryScene(container, works, callbacks = {}) {
@@ -18,10 +19,20 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   canvas.setAttribute('aria-label','3D展示室。ドラッグで見回す。左右の矢印キーで作品を巡る。');
   container.appendChild(canvas);
   let entered = false, selected = -1, raf = 0, tween = null, suspended = false, lost = false;
-  const disposables = [], hitTargets = [], occluders = [];
+  let entryJourney=null,lastFrame=null,ready=false;
+  const disposables = [], hitTargets = [], occluders = [], entranceTargets=[];
   function requestFrame() { if (!raf && !suspended && !lost) raf = requestAnimationFrame(render); }
   function render(now) {
     raf = 0;
+    if(suspended||lost){lastFrame=null;return;}
+    const delta=lastFrame===null?0:Math.min(64,now-lastFrame);lastFrame=now;
+    if(entryJourney){
+      entryJourney.elapsed+=delta;
+      const pose=sampleEntry(entryJourney.path,entryJourney.elapsed);
+      leftDoor.rotation.y=pose.doorAngle;rightDoor.rotation.y=-pose.doorAngle;
+      camera.position.copy(pose.position);camera.lookAt(pose.target);
+      if(pose.complete){entryJourney=null;entered=true;canvas.style.cursor='grab';canvas.setAttribute('aria-label','3D展示室。ドラッグで見回す。左右の矢印キーで作品を巡る。');callbacks.onEntered?.();}
+    }
     if (tween) {
       const t = Math.min(1,(now-tween.start)/tween.duration), e = t*t*(3-2*t);
       camera.position.lerpVectors(tween.from,tween.to,e);
@@ -29,7 +40,7 @@ export async function createGalleryScene(container, works, callbacks = {}) {
       if (t >= 1) { tween=null; callbacks.onSettled?.(selected); }
     }
     renderer.render(scene,camera);
-    if (tween) requestFrame();
+    if (tween||entryJourney) requestFrame();else lastFrame=null;
   }
   function material(color, props={}) { const m=new THREE.MeshStandardMaterial({color,roughness:.86,...props});disposables.push(m);return m; }
   function box(w,h,d,mat,x,y,z,parent=scene) {
@@ -83,13 +94,44 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   box(.94,.05,.05,darkMetal,0,doorH,-l/2+.02);
   const cafe=canvasTexture(256,64,(ctx)=>{ctx.fillStyle='#292f2b';ctx.fillRect(0,0,256,64);ctx.fillStyle='#e4e7d9';ctx.font='24px Georgia';ctx.textAlign='center';ctx.fillText('café',128,42);});
   const cafeMat=new THREE.MeshBasicMaterial({map:cafe,toneMapped:false});disposables.push(cafeMat);plane(.48,.12,cafeMat,0,2.32,-l/2+.012);
-  // The glazed front entrance and the evening beyond it.
-  const outside=material('#344749');box(w,h,.06,outside,0,h/2,l/2+.12);
-  const entranceGlass=new THREE.MeshBasicMaterial({color:'#557578',transparent:true,opacity:.3,side:THREE.DoubleSide});disposables.push(entranceGlass);
-  const front=plane(w-1,2.55,entranceGlass,0,1.3,l/2-.01);front.rotation.y=Math.PI;
-  for(const x of [-1.68,-.55,.55,1.68])box(.055,2.7,.07,darkMetal,x,1.35,l/2-.015);
-  for(const y of [.04,2.12,2.7])box(3.4,.055,.07,darkMetal,0,y,l/2-.015);
-  for(const x of [-.12,.12])box(.027,.35,.065,metal,x,1.05,l/2-.07);
+  // A real opening: two glazed leaves swing inward about their outer hinges.
+  const facade=material('#28393b',{roughness:.8}),entryZ=l/2+.035;
+  const leafWidth=entrance.width/2,entryHeight=entrance.height;
+  for(const s of [-1,1]){
+    box((w-entrance.width)/2,h,.18,facade,s*(w+entrance.width)/4,h/2,entryZ);
+    box(.07,entryHeight+.07,.13,darkMetal,s*(leafWidth+.035),entryHeight/2,entryZ+.03);
+  }
+  box(entrance.width,h-entryHeight,.18,facade,0,entryHeight+(h-entryHeight)/2,entryZ);
+  box(entrance.width+.14,.07,.13,darkMetal,0,entryHeight+.035,entryZ+.03);
+  box(entrance.width,.016,.2,metal,0,.008,entryZ);
+  // Exterior landing, extended side walls and a modest canopy frame the entrance.
+  box(w+4,.12,5,material('#333e3f',{roughness:.95}),0,-.065,l/2+2.5);
+  for(const s of [-1,1])box(2,h,.18,facade,s*(w/2+1),h/2,entryZ);
+  box(w+.3,.12,.95,darkMetal,0,h+.1,entryZ+.35);
+  const entranceGlass=new THREE.MeshPhysicalMaterial({color:'#b8d2ce',transparent:true,opacity:.21,roughness:.12,metalness:.05,side:THREE.DoubleSide,depthWrite:false});disposables.push(entranceGlass);
+  function makeDoor(side){
+    const pivot=new THREE.Group();pivot.position.set(side*leafWidth,0,entryZ);scene.add(pivot);
+    const centre=-side*leafWidth/2;
+    box(leafWidth-.012,entryHeight,.045,entranceGlass,centre,entryHeight/2,0,pivot);
+    for(const x of [centre-leafWidth/2+.026,centre+leafWidth/2-.026])box(.045,entryHeight,.072,darkMetal,x,entryHeight/2,0,pivot);
+    for(const y of [.035,entryHeight-.025])box(leafWidth,.06,.072,darkMetal,centre,y,0,pivot);
+    box(leafWidth,.035,.07,darkMetal,centre,.7,0,pivot);
+    for(const z of [-.075,.075]){
+      box(.022,.38,.026,metal,-side*(leafWidth-.13),1.13,z,pivot);
+      for(const y of [.97,1.29])box(.024,.023,.1,metal,-side*(leafWidth-.13),y,0,pivot);
+    }
+    entranceTargets.push(...pivot.children);
+    return pivot;
+  }
+  const leftDoor=makeDoor(-1),rightDoor=makeDoor(1);
+  const entrySign=canvasTexture(1024,256,ctx=>{
+    ctx.fillStyle='#182829';ctx.fillRect(0,0,1024,256);ctx.textAlign='center';ctx.fillStyle='#e9ecdf';
+    ctx.font='65px "Hiragino Mincho ProN", serif';ctx.fillText('鳥瞰図',512,108);
+    ctx.fillStyle='#c4d3c8';ctx.font='23px sans-serif';ctx.fillText('NAGATA KOSHI  /  PHOTOGRAPHY EXHIBITION',512,178);
+  });
+  const entrySignMat=new THREE.MeshBasicMaterial({map:entrySign,toneMapped:false});disposables.push(entrySignMat);
+  plane(1.48,.37,entrySignMat,0,2.7,entryZ+.101);
+  const entryLight=new THREE.PointLight('#edf2d8',4,5,2);entryLight.position.set(0,2.75,entryZ+.65);scene.add(entryLight);
   // Exposed beams, pipework and tracks preserve the industrial ceiling.
   for(const z of [-3.55,-1.4,.8,3])box(w,.14,.17,ceilingMat,0,h-.1,z);
   for(const x of [-1.48,0,1.48])box(.035,.04,l-.25,metal,x,h-.3,0);
@@ -145,8 +187,26 @@ export async function createGalleryScene(container, works, callbacks = {}) {
     if(immediate){tween=null;camera.position.copy(to);camera.quaternion.copy(qTo);callbacks.onSettled?.(selected);}else tween={from:camera.position.clone(),to,qFrom:camera.quaternion.clone(),qTo,start:performance.now(),duration:1100};
     requestFrame();
   }
-  function overview(immediate=false){selected=-1;moveTo([.72,1.64,l/2-.42],[-.3,1.3,-1.8],immediate);}
+  function exteriorPosition(){
+    const halfFov=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
+    const distance=Math.max(3.6,entrance.width*1.45/(2*halfFov*camera.aspect));
+    return [0,entrance.eyeHeight,l/2+distance];
+  }
+  function home(){
+    entryJourney=null;tween=null;lastFrame=null;entered=false;selected=-1;drag=null;
+    leftDoor.rotation.y=rightDoor.rotation.y=0;canvas.style.cursor=ready?'pointer':'wait';
+    canvas.setAttribute('aria-label','入口のガラス扉。クリック、またはEnterキーで写真展に入る。');
+    const position=exteriorPosition();moveTo(position,[0,1.52,position[2]-3.6],true);
+  }
+  function enter(){
+    if(!ready||entered||entryJourney)return;
+    selected=-1;tween=null;drag=null;lastFrame=null;canvas.style.cursor='default';
+    canvas.setAttribute('aria-label','扉を開けて展示室の中央へ移動中。');
+    entryJourney={elapsed:0,path:createEntryPath(l,camera.position.z)};requestFrame();
+  }
+  function overview(immediate=false){if(entryJourney)return;selected=-1;moveTo([0,entrance.eyeHeight,0],[0,1.52,-3.6],immediate);}
   function focus(index,immediate=false){
+    if(entryJourney)return;
     selected=index;const p=placement(index),sign=p.side==='left'?-1:1;
     const bounds=printSize(works[index].aspect),halfFov=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
     const distance=Math.min(room.width-.55,Math.max(1.15,(bounds.height+.024)*1.5/(2*halfFov),(bounds.width+.024)*1.4/(2*halfFov*camera.aspect)));
@@ -156,28 +216,38 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   }
   const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
   let drag=null;
-  canvas.addEventListener('pointerdown',event=>{if(!entered)return;canvas.setPointerCapture(event.pointerId);drag={id:event.pointerId,x:event.clientX,y:event.clientY,lastX:event.clientX,lastY:event.clientY,moved:false};});
+  canvas.addEventListener('pointerdown',event=>{if(!ready||entryJourney||event.button!==0)return;canvas.setPointerCapture(event.pointerId);drag={id:event.pointerId,x:event.clientX,y:event.clientY,lastX:event.clientX,lastY:event.clientY,moved:false};});
   canvas.addEventListener('pointermove',event=>{
     if(!drag||drag.id!==event.pointerId)return;
     if(Math.hypot(event.clientX-drag.x,event.clientY-drag.y)>5)drag.moved=true;
-    if(drag.moved){tween=null;const euler=new THREE.Euler().setFromQuaternion(camera.quaternion,'YXZ');euler.y-=(event.clientX-drag.lastX)*.004;euler.x=THREE.MathUtils.clamp(euler.x-(event.clientY-drag.lastY)*.003,-.8,.8);camera.quaternion.setFromEuler(euler);requestFrame();}
+    if(drag.moved&&entered){tween=null;const euler=new THREE.Euler().setFromQuaternion(camera.quaternion,'YXZ');euler.y-=(event.clientX-drag.lastX)*.004;euler.x=THREE.MathUtils.clamp(euler.x-(event.clientY-drag.lastY)*.003,-.8,.8);camera.quaternion.setFromEuler(euler);requestFrame();}
     drag.lastX=event.clientX;drag.lastY=event.clientY;
   });
   canvas.addEventListener('pointerup',event=>{
     if(!drag||drag.id!==event.pointerId)return;
-    if(!drag.moved){const rect=canvas.getBoundingClientRect();pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);const hits=raycaster.intersectObjects(hitTargets,false);if(hits.length){const blockers=raycaster.intersectObjects(occluders,false);if(!blockers.length||blockers[0].distance>=hits[0].distance-.001)callbacks.onSelect?.(hits[0].object.userData.index);}}
+    if(!drag.moved){
+      const rect=canvas.getBoundingClientRect();pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);
+      if(!entered){
+        if(raycaster.intersectObjects(entranceTargets,false).length)callbacks.onEnterRequest?.();
+      }else{
+        const hits=raycaster.intersectObjects(hitTargets,false);if(hits.length){const blockers=raycaster.intersectObjects(occluders,false);if(!blockers.length||blockers[0].distance>=hits[0].distance-.001)callbacks.onSelect?.(hits[0].object.userData.index);}
+      }
+    }
     drag=null;
   });
   canvas.addEventListener('pointercancel',()=>{drag=null;});
-  canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();lost=true;tween=null;callbacks.onContextLost?.();});
-  canvas.addEventListener('webglcontextrestored',()=>{lost=false;callbacks.onContextRestored?.();requestFrame();});
-  const resize=()=>{const {width,height}=container.getBoundingClientRect();renderer.setSize(width,height);camera.aspect=width/Math.max(1,height);camera.fov=width<700?59:55;camera.updateProjectionMatrix();if(selected>=0)focus(selected,true);requestFrame();};
+  canvas.addEventListener('keydown',event=>{
+    if(ready&&!entered&&!entryJourney&&(event.key==='Enter'||event.key===' ')){event.preventDefault();callbacks.onEnterRequest?.();}
+  });
+  canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();lost=true;tween=null;lastFrame=null;callbacks.onContextLost?.();});
+  canvas.addEventListener('webglcontextrestored',()=>{lost=false;lastFrame=null;callbacks.onContextRestored?.();requestFrame();});
+  const resize=()=>{const {width,height}=container.getBoundingClientRect();renderer.setSize(width,height);camera.aspect=width/Math.max(1,height);camera.fov=width<700?59:55;camera.updateProjectionMatrix();if(!entered&&!entryJourney)home();else if(selected>=0&&!entryJourney)focus(selected,true);requestFrame();};
   const observer=new ResizeObserver(resize);observer.observe(container);
-  overview(true);resize();
+  resize();
   await Promise.all(loadTasks);
-  requestFrame();
-  return {focus,overview,enter(){entered=true;overview();},home(){entered=false;overview();},
-    setSuspended(value){suspended=value;if(!suspended)requestFrame();},
+  ready=true;canvas.style.cursor='pointer';requestFrame();
+  return {focus,overview,enter,home,
+    setSuspended(value){suspended=value;lastFrame=null;if(!suspended)requestFrame();},
     dispose(){observer.disconnect();cancelAnimationFrame(raf);disposables.forEach(x=>x.dispose());renderer.dispose();canvas.remove();},
   };
 }
