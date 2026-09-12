@@ -28,7 +28,52 @@
 .entered .brand,.entered .room-caption{display:none}
 .entered .header-actions{margin-left:auto}
 
+/* A single, quiet viewing rail: artwork navigation and enlargement together. */
+.tour-dock{width:min(530px,calc(100% - 40px));bottom:42px;padding:10px 12px;gap:12px;border:1px solid #dce5e02e;border-radius:14px;background:linear-gradient(120deg,#152426f0,#142022e8);box-shadow:0 12px 36px #08131526,inset 0 1px 0 #ffffff08;backdrop-filter:blur(24px)}
+.dock-pager{display:flex;align-items:center;gap:4px;flex:1;min-width:0}
+.tour-dock .nav-arrow{display:grid;place-items:center;width:44px;height:48px;min-height:44px;border:0;border-radius:8px;background:transparent;transition:background .2s,color .2s;flex-shrink:0}
+.tour-dock .nav-arrow svg{width:22px;height:22px;stroke-width:1.4}
+.tour-dock .nav-arrow:hover:not(:disabled){background:#ffffff0c;color:#e2edcb;filter:none}
+.tour-dock .nav-arrow:disabled{opacity:.2}
+.tour-position{flex:1;min-width:82px;text-align:left;padding:0 10px}
+#work-counter{font-family:Georgia,"Times New Roman",serif;font-size:24px;font-weight:400;line-height:1.15;letter-spacing:.035em;font-variant-numeric:tabular-nums;white-space:nowrap;color:#f0f2e9}
+#work-label{margin-top:5px;color:#aebfba;font-size:12px;line-height:1.2;letter-spacing:.12em}
+.tour-dock .dock-divider{height:30px;margin:0;background:#dce5e026;flex-shrink:0}
+.tour-dock .focus-button{position:static;transform:none;flex:0 0 142px;justify-content:space-between;gap:12px;min-height:48px;padding:0 15px;border:1px solid #f1f1e578;border-radius:8px;background:#e9eddf;color:#1b2e2e;box-shadow:none;backdrop-filter:none;font-size:14px;letter-spacing:.03em;transition:background .2s}
+.tour-dock .focus-button:hover{background:#f5f7ed;filter:none}
+.tour-dock .focus-button .view-label{font-size:14px}
+.tour-dock .focus-button svg{width:19px;height:19px;stroke-width:1.4}
+.tour-dock .dock-button{min-width:44px;min-height:48px;justify-content:center;gap:4px;font-size:12px;color:#c6d1ca;border-radius:8px}
+.tour-dock .dock-button:hover{background:#ffffff0c;filter:none}
+.tour-dock .dock-button svg{width:19px;height:19px}
+.gesture-hint{bottom:16px;font-size:12px;letter-spacing:.035em;color:#d5ded7;text-shadow:0 1px 8px #102021}
+.gesture-hint span{margin:0 7px;color:#90a29b}
+@media(max-width:700px){
+ .tour-dock{display:grid;grid-template-columns:minmax(0,1fr) 46px;width:calc(100% - 32px);max-width:430px;bottom:calc(40px + env(safe-area-inset-bottom));padding:9px 12px;gap:7px 12px;border-radius:13px}
+ .dock-pager{grid-column:1;grid-row:1;gap:8px}.tour-position{min-width:0;padding:0 6px;text-align:center}
+ .tour-dock .dock-divider{display:none}.tour-dock .dock-button{grid-column:2;grid-row:1;border-left:1px solid #dce5e026;border-radius:0}
+ .tour-dock .focus-button{grid-column:1/-1;grid-row:2;min-height:42px;padding:0 16px;justify-content:center;gap:13px;border-radius:6px}
+ .tour-dock .nav-arrow{height:44px}.tour-dock .dock-button{min-height:44px}
+ #work-counter{font-size:23px}.gesture-hint{bottom:calc(15px + env(safe-area-inset-bottom));font-size:12px;letter-spacing:0}
+}
+@media(max-height:600px) and (min-width:701px){.tour-dock{bottom:26px;padding:7px 12px}.gesture-hint{bottom:6px}}
+@media(max-height:600px) and (max-width:700px){.tour-dock{bottom:25px;padding:7px 10px;gap:5px 10px}.tour-dock .focus-button{min-height:38px}.gesture-hint{bottom:5px}}
+
 /* The doorway is the first screen's focal point; keep its centre unobstructed. */
+.cafe-hotspot{position:absolute;transform:translate(-50%,-50%);min-height:44px;min-width:72px;padding:9px 15px;border:1px solid #bdc9bf6b;border-radius:4px;background:#152627b8;color:#edf0e3;backdrop-filter:blur(6px);z-index:2}
+.cafe-entry{font-family:Georgia,serif;font-size:16px}.cafe-entry span{margin-left:8px;font-family:Arial,sans-serif}
+.coffee-tap{font-family:Georgia,serif;font-size:21px;font-style:italic;background:#e5e9d8e8;color:#203635;border-color:#e5e9d8}.coffee-tap span{margin-left:8px;font-style:normal;font-family:Arial,sans-serif}
+.cafe-controls{position:absolute;left:50%;bottom:40px;transform:translateX(-50%);text-align:center;z-index:2}
+.cafe-controls p{font-size:13px;line-height:1.6;margin-bottom:12px;color:#eff0e5;text-shadow:0 1px 6px #101a1b}
+.cafe-controls .outline-button{margin:auto;white-space:nowrap;background:#142526d9;min-height:48px}
+.in-cafe .tour-dock,.in-cafe .gesture-hint,.in-cafe .map-card,.in-cafe .focus-button{display:none}
+.coffee-cup{position:absolute;z-index:3;background:transparent;border:0;padding:0;color:#f0f1e6;pointer-events:auto;-webkit-tap-highlight-color:transparent}
+.coffee-cup span{position:absolute;left:50%;bottom:-4px;transform:translateX(-50%);font-size:11px;letter-spacing:.12em;white-space:nowrap;background:#142526a8;border-radius:20px;padding:4px 10px}
+.coffee-cup:disabled{opacity:1;cursor:default}.coffee-cup:focus-visible{outline:2px solid #e3e9ce;outline-offset:4px;border-radius:12px}
+.has-coffee .map-card{max-height:calc(100svh - 360px);overflow:auto}
+@media(max-width:1100px){.has-coffee .map-card{top:95px;bottom:auto;max-height:calc(100svh - 420px)}}
+@media(max-width:700px){.cafe-controls{bottom:calc(35px + env(safe-area-inset-bottom));width:calc(100% - 40px)}.cafe-controls p{font-size:12px}.cafe-entry{font-size:14px;min-width:66px}}
+@media(max-height:600px){.cafe-controls{bottom:25px}.has-coffee .map-card{right:auto;left:20px;max-height:calc(100svh - 240px)}}
 .welcome .scene-shade{background:linear-gradient(0deg,rgba(8,17,18,.87),transparent 30%,transparent 76%,rgba(8,17,18,.5))}
 .welcome .intro{left:4%;right:auto;top:auto;bottom:38px;max-width:310px;pointer-events:none;transition:opacity .4s,transform .6s}
 .welcome .intro>.eyebrow{font-size:12px;letter-spacing:.12em}
@@ -59,3 +104,25 @@
  .welcome .intro h1{font-size:30px;margin:8px 0}.welcome .intro>.eyebrow{display:none}
  .welcome .intro-caption{margin:12px 0}.welcome .intro-note{display:none}
 }
+
+/* An anchored wall label marks the entrance to the second exhibition. */
+.exhibition-switch{--switch-width:184px;width:var(--switch-width);min-height:66px;padding:18px;text-align:left;background:linear-gradient(135deg,#182c2bf5,#203932ed);border:1px solid #c6d0a380;border-radius:3px;box-shadow:0 4px 15px #0002;color:#eff0df}
+.switch-main{display:flex;justify-content:space-between;align-items:center;gap:14px;font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;font-size:13px;font-weight:550;line-height:1.55;letter-spacing:.11em}
+#switch-label{white-space:normal}.switch-icon{width:23px;height:23px;flex-shrink:0;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;transition:transform .35s ease}
+.exhibition-switch:hover .switch-icon{transform:rotate(90deg)}
+.exhibition-switch:hover{background:#304c42}.collection-link{color:var(--accent);border-bottom:1px solid var(--line);margin-top:15px}
+.collection-transition{position:fixed;inset:0;z-index:100;background:#081312;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;color:#e8ebdc;pointer-events:auto}
+.collection-transition>span{font-size:11px;letter-spacing:.28em;color:#bdcaa7}.collection-transition h2{font-family:"Yu Mincho","Hiragino Mincho ProN",serif;font-size:clamp(27px,5vw,54px);font-weight:400;letter-spacing:.13em}.collection-transition p{font:13px Georgia,serif;letter-spacing:.1em;color:#bbc8be}
+@media(max-width:700px){.exhibition-switch{--switch-width:139px;min-height:62px;padding:13px 12px}.switch-main{font-size:12px;gap:10px;letter-spacing:.08em}.switch-icon{width:21px;height:21px}}
+
+@media(max-width:440px){.exhibition-switch{--switch-width:112px;padding:12px 9px}.switch-main{font-size:12px;gap:7px;letter-spacing:.04em}.switch-icon{width:19px;height:19px}}
+@media(prefers-reduced-motion:reduce){.switch-icon{transition:none}.exhibition-switch:hover .switch-icon{transform:none}}
+
+/* Keep the actual 3D tree and falling petals visible throughout the transition. */
+.changing-exhibition .tour-ui,.changing-exhibition .site-header{opacity:0;pointer-events:none}
+.collection-transition[data-mode=petals]{background:linear-gradient(0deg,#0a1c1955,transparent 42%);justify-content:flex-end;padding:0 20px 110px;gap:12px;text-align:center;text-shadow:0 2px 14px #001810cc}
+.collection-transition[data-mode=petals] h2{font-size:clamp(25px,3.5vw,38px)}
+.collection-transition[data-mode=petals]>span,.collection-transition[data-mode=petals] p{color:#e4eddd}
+.tour-dock .dock-button{min-width:48px;white-space:nowrap}
+@media(max-width:700px){.tour-dock{grid-template-columns:minmax(0,1fr) 50px}.tour-dock .dock-button{font-size:12px}.collection-transition[data-mode=petals]{padding-bottom:108px}}
+@media(prefers-reduced-motion:reduce){.collection-transition{transition:none}}
