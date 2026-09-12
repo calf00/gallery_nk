@@ -1,8 +1,10 @@
 import * as THREE from './vendor/three.module.min.js';
 import { room, printSize, fittedImage, placement } from './config.js?v=20260911-entry';
-import { entrance, createEntryPath, sampleEntry } from './entry-path.js?v=20260911-entry';
+import { entrance, createEntryPath, sampleEntry } from './entry-path.js?v=20260912-arcade';
 import { createCafe, cafePath, cafePose, cafeDoor } from './cafe.js?v=20260912-viewing-ui';
-import { createBotanicalScene } from './botanical.js?v=20260912-corner';
+import { createBotanicalScene, botanicalTiming } from './botanical.js?v=20260912-solid-tree';
+import { createClawMachine } from './claw-machine.js?v=20260912-arcade';
+import { createArcadeHall, createArcadePath, sampleArcadeJourney } from './arcade-hall.js?v=20260912-arcade';
 
 // The room is authored in metres; artwork paper sizes are true A2.
 export async function createGalleryScene(container, works, callbacks = {}) {
@@ -22,6 +24,7 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   container.appendChild(canvas);
   let entered = false, selected = -1, raf = 0, tween = null, suspended = false, lost = false;
   let entryJourney=null,lastFrame=null,ready=false,journey=null,area='gallery';
+  let arcadeJourney=null;
   const disposables = [], hitTargets = [], occluders = [], entranceTargets=[];
   const motionPreference=matchMedia('(prefers-reduced-motion: reduce)');
   const botanical=createBotanicalScene({THREE,scene,room,reducedMotion:motionPreference.matches});
@@ -49,6 +52,15 @@ export async function createGalleryScene(container, works, callbacks = {}) {
       camera.position.copy(journey.path.getPointAt(e));camera.quaternion.slerpQuaternions(journey.qFrom,journey.qTo,e);
       if(closing>=cafeDoor.slideMs){const done=journey.done;journey=null;notifyCafe();done?.();}
     }
+    if(arcadeJourney){
+      arcadeJourney.elapsed+=delta;
+      const pose=sampleArcadeJourney(arcadeJourney.path,arcadeJourney.elapsed);
+      camera.position.copy(pose.position);camera.lookAt(pose.target);
+      const lensT=Math.min(1,arcadeJourney.elapsed/arcadeJourney.path.duration);
+      camera.fov=THREE.MathUtils.lerp(arcadeJourney.fovFrom,arcadeJourney.direction==='out'?68:(container.getBoundingClientRect().width<700?59:55),lensT);camera.updateProjectionMatrix();
+      leftDoor.rotation.y=pose.doorAngle;rightDoor.rotation.y=-pose.doorAngle;
+      if(pose.complete){const {direction,done}=arcadeJourney;arcadeJourney=null;area=direction==='out'?'arcade':'gallery';notifyArcade();notifyCafe();done?.();}
+    }
     if (tween) {
       tween.elapsed+=delta;const t = Math.min(1,tween.elapsed/tween.duration), e = t*t*(3-2*t);
       camera.position.lerpVectors(tween.from,tween.to,e);
@@ -57,17 +69,18 @@ export async function createGalleryScene(container, works, callbacks = {}) {
     }
     if(exhibitionJourney){
       exhibitionJourney.elapsed+=delta;
-      if(!exhibitionJourney.committed&&(exhibitionJourney.elapsed>=1450||motionPreference.matches)){
+      if(!exhibitionJourney.committed&&(exhibitionJourney.elapsed>=700||motionPreference.matches)){
         exhibitionJourney.commit();exhibitionJourney.committed=true;
       }
-      if(exhibitionJourney.elapsed>=6200||motionPreference.matches){
+      if(exhibitionJourney.elapsed>=botanicalTiming.settleMs||motionPreference.matches){
         const resolve=exhibitionJourney.resolve;exhibitionJourney=null;resolve();
       }
     }
     const coffeeAnimating=cafe.tick(delta);
     const petalsAnimating=botanical.tick(delta);
-    renderer.render(scene,camera);cafe.draw(renderer);updateCafeHints();
-    if (tween||entryJourney||journey||exhibitionJourney||coffeeAnimating||petalsAnimating) requestFrame();else lastFrame=null;
+    const clawAnimating=claw.tick(delta);
+    renderer.render(scene,camera);if(area!=='arcade'&&!arcadeJourney)cafe.draw(renderer);updateCafeHints();
+    if (tween||entryJourney||journey||arcadeJourney||exhibitionJourney||coffeeAnimating||petalsAnimating||clawAnimating) requestFrame();else lastFrame=null;
   }
   function material(color, props={}) { const m=new THREE.MeshStandardMaterial({color,roughness:.86,...props});disposables.push(m);return m; }
   function box(w,h,d,mat,x,y,z,parent=scene) {
@@ -113,6 +126,55 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   const cafe=createCafe({scene,room,box,plane,material,canvasTexture,disposables,floorMat,wall,darkMetal,
     onCoffee(state){callbacks.onCoffee?.(state);if(ready)notifyCafe();},
   });
+  // A wall-mounted object: its lettering, edges and click surface share one
+  // world transform, so looking around cannot separate it from the wall.
+  const exhibitionPanel=new THREE.Group();
+  exhibitionPanel.name='exhibition-panel';
+  exhibitionPanel.position.set(-1.28,1.35,-l/2+.025);
+  scene.add(exhibitionPanel);
+  box(1.05,1.8,.045,material('#101b19',{metalness:.48,roughness:.56}),0,0,0,exhibitionPanel);
+  function panelTexture(mode){
+    return canvasTexture(700,1200,ctx=>{
+      ctx.fillStyle='#101d1a';ctx.fillRect(0,0,700,1200);
+      const sheen=ctx.createRadialGradient(90,100,0,90,100,1100);
+      sheen.addColorStop(0,'#2c4238');sheen.addColorStop(.48,'#1a2b24');sheen.addColorStop(1,'#101d1a');
+      ctx.fillStyle=sheen;ctx.fillRect(0,0,700,1200);
+      // Quiet, fine-grained metal, with no printed border around the panel.
+      let grain=37;
+      for(let i=0;i<11000;i++){
+        grain=grain*16807%2147483647;const x=grain%700;
+        grain=grain*16807%2147483647;const y=grain%1200;
+        ctx.fillStyle=i%2?'#e4edce08':'#0000000a';ctx.fillRect(x,y,1,1);
+      }
+      ctx.textAlign='left';
+      function trackedText(text,x,y,spacing){
+        // Explicit spacing keeps the lettering consistent across browsers.
+        for(const letter of text){ctx.fillText(letter,x,y);x+=ctx.measureText(letter).width+spacing;}
+      }
+      ctx.fillStyle='#eff0df';ctx.font='400 76px "Helvetica Neue", Helvetica, Arial, sans-serif';
+      trackedText(mode,76,176,7);
+      ctx.fillStyle='#bdcaba';ctx.font='400 40px "Helvetica Neue", Helvetica, Arial, sans-serif';
+      trackedText('MODE',79,251,13);
+      // Oversized circular arrows make the entire surface read as a switch.
+      ctx.strokeStyle='#d8dfc5';ctx.lineWidth=7;ctx.lineCap='round';ctx.lineJoin='round';
+      const cx=350,cy=699,radius=213;
+      for(const start of [-1.15,Math.PI-1.15]){
+        const end=start+2.52;
+        ctx.beginPath();ctx.arc(cx,cy,radius,start,end);ctx.stroke();
+        const x=cx+radius*Math.cos(end),y=cy+radius*Math.sin(end);
+        const tx=-Math.sin(end),ty=Math.cos(end),nx=Math.cos(end),ny=Math.sin(end);
+        ctx.beginPath();ctx.moveTo(x-38*tx+30*nx,y-38*ty+30*ny);ctx.lineTo(x,y);
+        ctx.lineTo(x-38*tx-30*nx,y-38*ty-30*ny);ctx.stroke();
+      }
+    });
+  }
+  const panelTextures={nature:panelTexture('NATURE'),night:panelTexture('NIGHT')};
+  for(const texture of Object.values(panelTextures))texture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
+  const panelMaterial=new THREE.MeshBasicMaterial({map:panelTextures.nature,toneMapped:false});
+  disposables.push(panelMaterial);
+  const panelFace=plane(1.05,1.8,panelMaterial,0,0,.026,exhibitionPanel);
+  panelFace.name='exhibition-panel-face';
+  panelFace.userData={action:'exhibition-switch',destination:'nature'};
   // A real opening: two glazed leaves swing inward about their outer hinges.
   const facade=material('#28393b',{roughness:.8}),entryZ=l/2+.035;
   const leafWidth=entrance.width/2,entryHeight=entrance.height;
@@ -143,6 +205,9 @@ export async function createGalleryScene(container, works, callbacks = {}) {
     return pivot;
   }
   const leftDoor=makeDoor(-1),rightDoor=makeDoor(1);
+  const arcadeHall=createArcadeHall({scene});occluders.push(...arcadeHall.occluders);
+  const claw=createClawMachine({scene,onState:state=>callbacks.onClawState?.(state),onWin:()=>callbacks.onClawWin?.()});
+  for(const object of entranceTargets)object.userData.action='entrance';
   const entrySign=canvasTexture(1024,256,ctx=>{
     ctx.fillStyle='#182829';ctx.fillRect(0,0,1024,256);ctx.textAlign='center';ctx.fillStyle='#e9ecdf';
     ctx.font='65px "Hiragino Mincho ProN", serif';ctx.fillText('鳥瞰図',512,108);
@@ -232,7 +297,11 @@ export async function createGalleryScene(container, works, callbacks = {}) {
     if(exhibitionJourney)throw new Error('An exhibition transition is already in progress');
     const prepared=await prepareWorks(nextWorks,collectionLabel);
     if(lost){prepared.discard();throw new Error('3D rendering is unavailable');}
-    const commit=()=>{prepared.commit();natureActive=nature;if(!nature)botanical.stop();};
+    const commit=()=>{
+      prepared.commit();natureActive=nature;if(!nature)botanical.stop();
+      const destination=nature?'night':'nature';
+      panelFace.userData.destination=destination;panelMaterial.map=panelTextures[destination];
+    };
     if(!animate||!entered){commit();return;}
     overview(true);
     if(!nature){commit();return;}
@@ -255,12 +324,12 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   function exteriorPosition(){
     const halfFov=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
     const distance=Math.max(3.6,entrance.width*1.45/(2*halfFov*camera.aspect));
-    return [0,entrance.eyeHeight,l/2+distance];
+    return [0,entrance.eyeHeight,Math.min(9.2,l/2+distance)];
   }
   function home(){
     cancelExhibition();botanical.stop();
-    entryJourney=null;journey=null;tween=null;lastFrame=null;entered=false;selected=-1;drag=null;area='gallery';cafe.reset();notifyCafe();
-    leftDoor.rotation.y=rightDoor.rotation.y=0;canvas.style.cursor=ready?'pointer':'wait';
+    entryJourney=null;journey=null;arcadeJourney=null;tween=null;lastFrame=null;entered=false;selected=-1;drag=null;area='gallery';claw.close();cafe.reset();notifyCafe();notifyArcade();
+    leftDoor.rotation.y=rightDoor.rotation.y=0;camera.fov=container.getBoundingClientRect().width<700?59:55;camera.updateProjectionMatrix();canvas.style.cursor=ready?'pointer':'wait';
     canvas.setAttribute('aria-label','入口のガラス扉。クリック、またはEnterキーで写真展に入る。');
     const position=exteriorPosition();moveTo(position,[0,1.52,position[2]-3.6],true);
   }
@@ -270,9 +339,10 @@ export async function createGalleryScene(container, works, callbacks = {}) {
     canvas.setAttribute('aria-label','扉を開けて展示室の中央へ移動中。');
     entryJourney={elapsed:0,path:createEntryPath(l,camera.position.z)};requestFrame();
   }
-  function overview(immediate=false){if(entryJourney||journey||cafe.state==='pouring')return;if(area==='cafe'){leaveCafe();return;}selected=-1;moveTo([0,entrance.eyeHeight,0],[0,1.52,-3.6],immediate);}
+  function overview(immediate=false){if(entryJourney||journey||arcadeJourney||claw.inGame||cafe.state==='pouring')return;if(area==='cafe'){leaveCafe();return;}if(area==='arcade'){leaveArcade();return;}selected=-1;moveTo([0,entrance.eyeHeight,0],[0,1.52,-3.6],immediate);}
   function focus(index,immediate=false){
-    if(entryJourney||journey||cafe.state==='pouring')return;
+    if(entryJourney||journey||arcadeJourney||claw.inGame||cafe.state==='pouring')return;
+    if(area==='arcade'){leaveArcade(()=>focus(index,immediate));return;}
     if(area==='cafe'){leaveCafe(()=>focus(index,immediate));return;}
     selected=index;const p=placement(index),sign=p.side==='left'?-1:1;
     const bounds=printSize(works[index].aspect),halfFov=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
@@ -288,7 +358,7 @@ export async function createGalleryScene(container, works, callbacks = {}) {
     notifyCafe();requestFrame();
   }
   function visitCafe(){
-    if(!entered||entryJourney||journey||area==='cafe')return;
+    if(!entered||entryJourney||journey||arcadeJourney||area!=='gallery')return;
     selected=-1;area='cafe';callbacks.onCafeVisit?.();
     travel(cafePath(camera.position),cafePose.target);
   }
@@ -299,21 +369,43 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   function faceCafeDoor(){if(area!=='cafe'||journey||cafe.state==='pouring')return;moveTo(camera.position.toArray(),[0,1.4,-l/2]);}
   function pourCoffee(){if(area==='cafe'&&!journey&&cafe.pour())requestFrame();}
   function sipCoffee(){if(!journey&&cafe.sip())requestFrame();}
+  function notifyArcade(){callbacks.onArcadeState?.({area,busy:!!arcadeJourney});}
+  function travelArcade(direction,done){
+    selected=-1;tween=null;drag=null;lastFrame=null;claw.stopMove();
+    arcadeJourney={direction,path:createArcadePath(l,camera.position,direction),elapsed:0,fovFrom:camera.fov,done};
+    callbacks.onArcadeVisit?.();notifyArcade();requestFrame();
+  }
+  function visitArcade(){
+    if(!entered||entryJourney||journey||arcadeJourney||exhibitionJourney||area!=='gallery')return;
+    travelArcade('out');
+  }
+  function leaveArcade(done){
+    if(area!=='arcade'||arcadeJourney||claw.inGame)return;
+    travelArcade('in',done);
+  }
+  function startClaw(){
+    if(area!=='arcade'||arcadeJourney||!claw.start())return;
+    // A slight view from above keeps both front/back motion and the chute legible.
+    moveTo([-.65,1.85,7.12],[-3.5,1.45,6.5]);
+    requestFrame();
+  }
+  function closeClaw(){claw.close();if(area==='arcade')moveTo([-.65,1.62,6.5],[-3.5,1.45,6.5]);requestFrame();}
+  function moveClaw(axis,direction){if(claw.move(axis,direction))requestFrame();}
+  function nudgeClaw(axis,direction){if(claw.move(axis,direction)){claw.tick(100);claw.stopMove();requestFrame();}}
+  function stopClaw(){claw.stopMove();}
+  function grabClaw(){if(claw.grab())requestFrame();}
   function updateCafeHints(){
     if(!callbacks.onCafeHints)return;
     const rect=container.getBoundingClientRect();
     const project=point=>{const p=point.clone().project(camera);return {x:(p.x+1)*rect.width/2,y:(1-p.y)*rect.height/2,visible:p.z>-1&&p.z<1&&Math.abs(p.x)<.9&&Math.abs(p.y)<.9};};
-    const portal=project(cafe.portalHint),exit=project(cafe.exitHint),machine=project(cafe.machineHint);
-    portal.visible=portal.visible&&entered&&!journey&&area==='gallery'&&selected<0;
+    const exit=project(cafe.exitHint),machine=project(cafe.machineHint);
     exit.visible=exit.visible&&entered&&!journey&&area==='cafe'&&cafe.state!=='pouring';
     machine.visible=machine.visible&&entered&&!journey&&area==='cafe'&&cafe.state==='empty';
-    const exhibitionPortal=project(new THREE.Vector3(-1.08,1.58,-l/2+.08));
-    exhibitionPortal.visible=exhibitionPortal.visible&&entered&&!journey&&area==='gallery'&&selected<0;
-    callbacks.onCafeHints({portal,exit,machine,exhibitionPortal,cup:cafe.bounds});
+    callbacks.onCafeHints({exit,machine,cup:cafe.bounds});
   }
   const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
   let drag=null;
-  canvas.addEventListener('pointerdown',event=>{if(!ready||entryJourney||journey||cafe.state==='pouring'||event.button!==0)return;canvas.setPointerCapture(event.pointerId);drag={id:event.pointerId,x:event.clientX,y:event.clientY,lastX:event.clientX,lastY:event.clientY,moved:false};});
+  canvas.addEventListener('pointerdown',event=>{if(!ready||entryJourney||journey||arcadeJourney||claw.inGame||exhibitionJourney||cafe.state==='pouring'||event.button!==0)return;canvas.setPointerCapture(event.pointerId);drag={id:event.pointerId,x:event.clientX,y:event.clientY,lastX:event.clientX,lastY:event.clientY,moved:false};});
   canvas.addEventListener('pointermove',event=>{
     if(!drag||drag.id!==event.pointerId)return;
     if(Math.hypot(event.clientX-drag.x,event.clientY-drag.y)>5)drag.moved=true;
@@ -327,11 +419,11 @@ export async function createGalleryScene(container, works, callbacks = {}) {
       if(!entered){
         if(raycaster.intersectObjects(entranceTargets,false).length)callbacks.onEnterRequest?.();
       }else{
-        const targets=area==='cafe'?[cafe.machineTarget,cafe.exitPortal]:[...hitTargets,cafe.portal];
+        const targets=area==='cafe'?[cafe.machineTarget,cafe.exitPortal]:area==='arcade'?[claw.hitTarget,...entranceTargets]:[...hitTargets,cafe.portal,panelFace,...entranceTargets];
         const hits=raycaster.intersectObjects(targets,false);
         if(hits.length){const blockers=raycaster.intersectObjects(occluders,false);if(!blockers.length||blockers[0].distance>=hits[0].distance-.001){
           const data=hits[0].object.userData;
-          if(data.action==='cafe')visitCafe();else if(data.action==='exit-cafe')leaveCafe();else if(data.action==='coffee')pourCoffee();else callbacks.onSelect?.(data.index);
+          if(data.action==='entrance'){if(area==='arcade')leaveArcade();else visitArcade();}else if(data.action==='claw')startClaw();else if(data.action==='cafe')visitCafe();else if(data.action==='exit-cafe')leaveCafe();else if(data.action==='coffee')pourCoffee();else if(data.action==='exhibition-switch')callbacks.onExhibitionSwitch?.();else callbacks.onSelect?.(data.index);
         }}
       }
     }
@@ -340,16 +432,17 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   canvas.addEventListener('pointercancel',()=>{drag=null;});
   canvas.addEventListener('keydown',event=>{
     if(ready&&!entered&&!entryJourney&&(event.key==='Enter'||event.key===' ')){event.preventDefault();callbacks.onEnterRequest?.();}
+    else if(entered&&area==='arcade'&&(event.key==='Enter'||event.key===' ')){event.preventDefault();startClaw();}
   });
   canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();lost=true;tween=null;lastFrame=null;if(exhibitionJourney){if(!exhibitionJourney.committed)exhibitionJourney.commit();const resolve=exhibitionJourney.resolve;exhibitionJourney=null;resolve();}callbacks.onContextLost?.();});
   canvas.addEventListener('webglcontextrestored',()=>{lost=false;lastFrame=null;callbacks.onContextRestored?.();requestFrame();});
-  const resize=()=>{const {width,height}=container.getBoundingClientRect();renderer.setSize(width,height);cafe.resize(width,height);camera.aspect=width/Math.max(1,height);camera.fov=width<700?59:55;camera.updateProjectionMatrix();if(!entered&&!entryJourney)home();else if(selected>=0&&!entryJourney&&!journey)focus(selected,true);requestFrame();};
+  const resize=()=>{const {width,height}=container.getBoundingClientRect();renderer.setSize(width,height);cafe.resize(width,height);camera.aspect=width/Math.max(1,height);camera.fov=area==='arcade'?68:width<700?59:55;camera.updateProjectionMatrix();if(!entered&&!entryJourney)home();else if(selected>=0&&!entryJourney&&!journey)focus(selected,true);requestFrame();};
   const observer=new ResizeObserver(resize);observer.observe(container);
   resize();
   await Promise.all(loadTasks);
   ready=true;canvas.style.cursor='pointer';requestFrame();
-  return {focus,overview,enter,home,visitCafe,leaveCafe,faceCafeDoor,pourCoffee,sipCoffee,replaceWorks,transitionExhibition,
-    setSuspended(value){suspended=value;lastFrame=null;if(!suspended)requestFrame();},
-    dispose(){cancelExhibition();botanical.dispose();motionPreference.removeEventListener?.('change',onMotionChange);observer.disconnect();cancelAnimationFrame(raf);disposables.forEach(x=>x.dispose());renderer.dispose();canvas.remove();},
+  return {focus,overview,enter,home,visitCafe,leaveCafe,faceCafeDoor,pourCoffee,sipCoffee,replaceWorks,transitionExhibition,visitArcade,leaveArcade,startClaw,closeClaw,moveClaw,nudgeClaw,stopClaw,grabClaw,
+    setSuspended(value){suspended=value;lastFrame=null;if(value)claw.stopMove();else requestFrame();},
+    dispose(){cancelExhibition();claw.dispose();arcadeHall.dispose();botanical.dispose();motionPreference.removeEventListener?.('change',onMotionChange);observer.disconnect();cancelAnimationFrame(raf);disposables.forEach(x=>x.dispose());renderer.dispose();canvas.remove();},
   };
 }

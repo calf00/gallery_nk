@@ -5,8 +5,8 @@
   <title>鳥瞰図 — Online Gallery</title>
   <meta name="description" content="街が眠っても、光はつづく。12枚の夜景を巡るバーチャル写真展。">
   <meta name="theme-color" content="#101a1b">
-  <link rel="icon" href="./favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="./style.css?v=20260912-corner">
-  <script type="module" src="./app.js?v=20260912-cafe-clean"></script>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="./style.css?v=20260912-wall-panel">
+  <script type="module" src="./app.js?v=20260912-arcade"></script>
 </head>
 <body>
   <a class="skip-link" href="#index-button">作品一覧へ</a>
@@ -25,8 +25,6 @@
     <div class="intro-note"><span>TWELVE FRAGMENTS<br>OF THE NIGHT.</span><span class="note-line"></span><span>ONLINE<br>EXHIBITION</span></div>
     <p class="entry-status" id="entry-status" role="status" hidden>写真展へ、ようこそ。</p>
     <section id="tour-ui" class="tour-ui" hidden aria-label="展示室の操作">
-      <button id="exhibition-switch" class="exhibition-switch cafe-hotspot" aria-label="NATURE MODE：自然の写真展に切り替える" hidden><span class="switch-main"><span id="switch-label">NATURE MODE</span><svg class="switch-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 8a8 8 0 0 0-13.7-2L3 9m0-5v5h5M4 16a8 8 0 0 0 13.7 2L21 15m0 5v-5h-5"/></svg></span></button>
-      <button id="cafe-entry" class="cafe-hotspot cafe-entry" aria-label="奥のカフェスペースへ" hidden>café <span aria-hidden="true">↗</span></button>
       <button id="cafe-exit" class="cafe-hotspot cafe-entry" aria-label="ガラスの扉から展示室へ戻る" hidden>展示室へ <span aria-hidden="true">↗</span></button>
       <button id="coffee-tap" class="cafe-hotspot coffee-tap" aria-label="コーヒーを注ぐ" hidden>tap! <span aria-hidden="true">↓</span></button>
       <div id="cafe-controls" class="cafe-controls" hidden>
@@ -34,7 +32,7 @@
       </div>
       <button id="coffee-cup" class="coffee-cup" aria-label="コーヒーをひと口飲む" hidden><span>ひと口</span></button>
       <div class="room-caption"><span class="eyebrow">THE EXHIBITION</span><h2 id="current-title">鳥瞰図</h2><p id="current-subtitle">気になる写真をタップして、その前へ。</p></div>
-      <div class="map-card" id="map-card"><button class="map-heading" id="map-toggle" aria-expanded="true" aria-controls="room-map">FLOOR PLAN <span aria-hidden="true">−</span></button><div id="room-map" class="room-map"></div><span class="map-caption">番号を選んで移動</span></div>
+      <div class="map-card" id="map-card"><button class="map-heading" id="map-toggle" aria-expanded="true" aria-controls="room-map">FLOOR PLAN <span aria-hidden="true">−</span></button><div id="room-map" class="room-map"></div><span class="map-caption">番号を選んで移動</span><button id="hallway-button" class="map-exit">入口・廊下へ ↗</button></div>
       <nav class="tour-dock" aria-label="作品を巡る">
         <div class="dock-pager">
           <button id="previous-button" class="nav-arrow" aria-label="前の作品へ" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H4m6-6-6 6 6 6"/></svg></button>
@@ -46,6 +44,22 @@
         <button id="overview-button" class="dock-button" aria-label="展示室の中央へ"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2V5Zm6-2v16m6-14v16"/></svg><span>中央へ</span></button>
       </nav>
       <p class="gesture-hint">ドラッグで見回す <span>·</span> 写真をタップで移動</p>
+    </section>
+    <div id="arcade-controls" class="arcade-controls" hidden><button id="arcade-return" class="arcade-back">← 展示室へ</button><button id="arcade-start" class="arcade-start">タッチしてあそぶ</button></div>
+    <p id="arcade-travel-status" class="arcade-travel-status" role="status" hidden>廊下を移動しています…</p>
+    <section id="claw-controls" class="claw-controls" aria-label="UFOキャッチャーの操作" hidden>
+      <button id="claw-close" class="claw-close" aria-label="ゲームを閉じる">×</button>
+      <div id="claw-result" class="claw-result" role="status" aria-live="polite" hidden>ナイス！</div>
+      <div id="claw-inputs" class="claw-console">
+        <div class="claw-direction-pad" role="group" aria-label="爪の移動">
+          <button data-claw-axis="z" data-claw-direction="-1" class="claw-up" aria-label="爪を奥へ動かす"><span aria-hidden="true">↑</span></button>
+          <button data-claw-axis="x" data-claw-direction="-1" class="claw-left" aria-label="爪を左へ動かす"><span aria-hidden="true">←</span></button>
+          <button data-claw-axis="x" data-claw-direction="1" class="claw-right" aria-label="爪を右へ動かす"><span aria-hidden="true">→</span></button>
+          <button data-claw-axis="z" data-claw-direction="1" class="claw-down" aria-label="爪を手前へ動かす"><span aria-hidden="true">↓</span></button>
+        </div>
+        <p id="claw-status" class="claw-status" role="status">押している間、移動</p>
+        <button id="claw-grab" class="claw-grab"><span aria-hidden="true">↓</span>つかむ</button>
+      </div>
     </section>
     <div id="notice" class="notice" role="status" hidden></div>
     <noscript><div class="noscript">3D展示にはJavaScriptが必要です。<a href="./photos.html">12枚の写真を見る</a></div></noscript>

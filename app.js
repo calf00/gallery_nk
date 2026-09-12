@@ -6,9 +6,10 @@ const gallery=$('gallery'), indexDialog=$('index-dialog'), viewer=$('viewer-dial
 const pad=n=>String(n).padStart(2,'0');
 let works=[], scene=null, selected=-1, viewerIndex=0, entered=false, entering=false, sceneFailed=false;
 let noticeTimer,cafeArea='gallery',cafeBusy=false,coffeeState='empty';
+let arcadeArea='gallery',arcadeBusy=false,clawState={phase:'idle',inGame:false,canMove:false,canGrab:false};
 function announce(text){$('notice').textContent=text;$('notice').hidden=false;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>{$('notice').hidden=true;},4200);}
 function syncSuspend(){scene?.setSuspended(document.hidden||indexDialog.open||viewer.open);}
-function showIndex(){if(switching)return;if(!works.length){location.href='./photos.html';return;}indexDialog.showModal();syncSuspend();}
+function showIndex(){if(switching||arcadeBusy||clawState.inGame)return;if(!works.length){location.href='./photos.html';return;}indexDialog.showModal();syncSuspend();}
 $('index-button').addEventListener('click',showIndex);
 for(const button of document.querySelectorAll('[data-close]'))button.addEventListener('click',()=>$(button.dataset.close).close());
 for(const dialog of [indexDialog,viewer]) {
@@ -50,7 +51,8 @@ function updateSelection(index){
 function selectWork(index,{open=false}={}){
   if(!Number.isInteger(index)||index<0||index>=works.length)return;
   if(!scene||sceneFailed){openViewer(index);return;}
-  if(cafeBusy||switching)return;
+  if(cafeBusy||switching||arcadeBusy||clawState.inGame)return;
+  if(arcadeArea==='arcade'){scene.leaveArcade(()=>selectWork(index,{open}));return;}
   if(cafeArea==='cafe'){scene.leaveCafe(()=>selectWork(index,{open}));return;}
   if(entering)return;
   if(!entered){openViewer(index);return;}
@@ -79,10 +81,68 @@ function syncCoffee(state){
   $('coffee-cup').hidden=!carrying;$('coffee-cup').disabled=state==='sipping'||cafeBusy;
   if(received){toggleMap(false);announce('コーヒーをどうぞ。右下のカップをタップすると、ひと口。');}
 }
-$('cafe-entry').addEventListener('click',()=>scene?.visitCafe());
 $('coffee-tap').addEventListener('click',()=>scene?.pourCoffee());
 $('cafe-exit').addEventListener('click',()=>scene?.leaveCafe());
 $('coffee-cup').addEventListener('click',()=>scene?.sipCoffee());
+const clawHeld=new Map(),clawKeys=new Map();
+function applyClawInput(){
+  for(const axis of ['x','z']){
+    const directions=[...clawHeld.values(),...clawKeys.values()].filter(value=>value.axis===axis);
+    scene?.moveClaw(axis,Math.sign(directions.reduce((sum,value)=>sum+value.direction,0)));
+  }
+}
+function stopClawInput(){clawHeld.clear();clawKeys.clear();scene?.stopClaw();for(const button of document.querySelectorAll('[data-claw-axis]'))button.classList.remove('held');}
+function syncArcade({area,busy}){
+  arcadeArea=area;arcadeBusy=busy;$('index-switch').disabled=area==='arcade'||busy;
+  gallery.classList.toggle('in-arcade',area==='arcade');gallery.classList.toggle('arcade-travelling',busy);
+  $('arcade-controls').hidden=area!=='arcade'||busy||clawState.inGame;
+  $('arcade-start').hidden=clawState.phase==='won';
+  $('arcade-return').disabled=busy;$('index-button').disabled=busy||clawState.inGame||cafeBusy||entering;
+  $('arcade-travel-status').hidden=!busy;
+  $('scene').querySelector('canvas')?.setAttribute('aria-label',area==='arcade'?'UFOキャッチャー。タッチ、またはEnterキーでゲーム開始。':'3D展示室。ドラッグで見回す。入口の扉をタップすると廊下へ。');
+}
+function syncClaw(state){
+  clawState=state;if(!state.canMove)stopClawInput();
+  if(arcadeArea==='arcade')$('scene').querySelector('canvas')?.setAttribute('aria-label',state.phase==='won'?'UFOキャッチャー。景品獲得、ゲーム終了。':state.inGame?'UFOキャッチャー。矢印ボタンで左右・前後に移動し、つかむボタンで景品を取る。':'UFOキャッチャー。タッチ、またはEnterキーでゲーム開始。');
+  gallery.classList.toggle('playing-claw',state.inGame);
+  $('claw-controls').hidden=!state.inGame;$('claw-result').hidden=!state.inGame||state.phase!=='won';
+  $('claw-inputs').hidden=state.phase==='won';
+  $('claw-close').disabled=state.inGame&&!['aiming','won','idle'].includes(state.phase);
+  $('claw-grab').disabled=!state.canGrab;
+  for(const button of document.querySelectorAll('[data-claw-axis]'))button.disabled=!state.canMove;
+  $('claw-status').textContent=state.canMove?'押している間、移動':state.phase==='won'?'':'つかんでいます…';
+  $('arcade-controls').hidden=arcadeArea!=='arcade'||arcadeBusy||state.inGame;
+  $('arcade-start').hidden=state.phase==='won';
+  $('index-button').disabled=arcadeBusy||state.inGame||cafeBusy||entering;
+}
+$('hallway-button').addEventListener('click',()=>scene?.visitArcade());
+$('arcade-return').addEventListener('click',()=>scene?.leaveArcade());
+$('arcade-start').addEventListener('click',()=>scene?.startClaw());
+$('claw-close').addEventListener('click',()=>{stopClawInput();scene?.closeClaw();});
+$('claw-grab').addEventListener('click',()=>{stopClawInput();scene?.grabClaw();});
+for(const button of document.querySelectorAll('[data-claw-axis]')){
+  const value={axis:button.dataset.clawAxis,direction:Number(button.dataset.clawDirection)};
+  button.addEventListener('pointerdown',event=>{
+    if(!clawState.canMove||event.button!==0)return;
+    event.preventDefault();button.setPointerCapture(event.pointerId);scene?.nudgeClaw(value.axis,value.direction);clawHeld.set(event.pointerId,value);button.classList.add('held');applyClawInput();
+  });
+  const release=event=>{clawHeld.delete(event.pointerId);button.classList.remove('held');applyClawInput();};
+  button.addEventListener('pointerup',release);button.addEventListener('pointercancel',release);button.addEventListener('lostpointercapture',release);
+  button.addEventListener('click',event=>{if(event.detail===0&&clawState.canMove)scene?.nudgeClaw(value.axis,value.direction);});
+  // Space/Enter on focused movement buttons use the same hold-and-release action.
+  button.addEventListener('keydown',event=>{if(![' ','Enter'].includes(event.key)||!clawState.canMove)return;event.preventDefault();clawKeys.set(event.key,value);button.classList.add('held');applyClawInput();});
+  button.addEventListener('keyup',event=>{if(![' ','Enter'].includes(event.key))return;event.preventDefault();clawKeys.delete(event.key);button.classList.remove('held');applyClawInput();});
+  button.addEventListener('blur',stopClawInput);
+}
+const clawArrowKeys={ArrowLeft:{axis:'x',direction:-1},ArrowRight:{axis:'x',direction:1},ArrowUp:{axis:'z',direction:-1},ArrowDown:{axis:'z',direction:1}};
+window.addEventListener('keydown',event=>{
+  if(!clawState.inGame||event.altKey||event.ctrlKey||event.metaKey)return;
+  if(clawArrowKeys[event.key]){event.preventDefault();if(clawState.canMove){clawKeys.set(event.key,clawArrowKeys[event.key]);applyClawInput();}}
+  if(event.key==='Escape'&&!$('claw-close').disabled){event.preventDefault();scene?.closeClaw();}
+});
+window.addEventListener('keyup',event=>{if(clawKeys.delete(event.key))applyClawInput();});
+window.addEventListener('blur',stopClawInput);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopClawInput();});
 function buildCollection(){
   $('works-grid').replaceChildren();$('room-map').replaceChildren();
   works.forEach((work,i)=>{
@@ -117,7 +177,7 @@ window.addEventListener('keydown',event=>{
   if(event.altKey||event.ctrlKey||event.metaKey||event.shiftKey)return;
   if(event.key!=='ArrowRight'&&event.key!=='ArrowLeft')return;
   if(viewer.open){if($('viewer-stage').classList.contains('zoomed'))return;event.preventDefault();stepViewer(event.key==='ArrowRight'?1:-1);}
-  else if(entered&&!indexDialog.open&&!switching&&!cafeBusy&&cafeArea!=='cafe'){event.preventDefault();selectWork(selected+(event.key==='ArrowRight'?1:-1));}
+  else if(entered&&!indexDialog.open&&!switching&&!cafeBusy&&!arcadeBusy&&!clawState.inGame&&arcadeArea!=='arcade'&&cafeArea!=='cafe'){event.preventDefault();selectWork(selected+(event.key==='ArrowRight'?1:-1));}
 });
 function fallback(message){sceneFailed=true;gallery.classList.add('fallback');$('scene').querySelector('canvas')?.remove();$('enter-button').disabled=false;$('enter-text').textContent='12枚の写真を見る';$('load-status').textContent=message;}
 async function init(){
@@ -125,18 +185,22 @@ async function init(){
     const response=await fetch('./assets/manifest.json');if(!response.ok)throw new Error('manifest');works=await response.json();if(works.length!==12)throw new Error('count');buildCollection();
     const slow=setTimeout(()=>{$('load-status').textContent='読み込み中です。右上の作品一覧からも鑑賞できます。';},10000);
     try{
-      const {createGalleryScene}=await import('./scene.js?v=20260912-corner');
+      const {createGalleryScene}=await import('./scene.js?v=20260912-arcade');
       scene=await createGalleryScene($('scene'),works,{
         onProgress(n,total){$('load-status').textContent=`展示室を準備中 ${n} / ${total}`;},
         onEnterRequest:enter,
         onEntered:finishEntry,
         onSelect:i=>selectWork(i),
+        onExhibitionSwitch:switchCollection,
         onCafeVisit(){updateSelection(-1);},
         onCafeState:syncCafe,
+        onArcadeVisit(){updateSelection(-1);},
+        onArcadeState:syncArcade,
+        onClawState:syncClaw,
         onCoffee:syncCoffee,
-        onCafeHints({portal,exit,machine,exhibitionPortal,cup}){
-          for(const [id,point] of [['cafe-entry',portal],['cafe-exit',exit],['coffee-tap',machine],['exhibition-switch',exhibitionPortal]]){
-            const button=$(id);button.hidden=!point.visible||switching;button.style.left=id==='exhibition-switch'?`clamp(calc(var(--switch-width)/2 + 10px), ${point.x}px, calc(100% - var(--switch-width)/2 - 10px))`:`${point.x}px`;button.style.top=`${point.y}px`;
+        onCafeHints({exit,machine,cup}){
+          for(const [id,point] of [['cafe-exit',exit],['coffee-tap',machine]]){
+            const button=$(id);button.hidden=!point.visible||switching;button.style.left=`${point.x}px`;button.style.top=`${point.y}px`;
           }
           if(cafeArea==='cafe'&&!cafeBusy){
             const message=exit.visible?'ガラスの扉をタップして、展示室へ。':coffeeState==='empty'?'マシンをタップして、一杯どうぞ。':'コーヒーと一緒に、ゆっくりどうぞ。';
@@ -162,7 +226,7 @@ async function transitionAnimation(frames,duration){
   await animation.finished;animation.commitStyles();animation.cancel();
 }
 async function switchCollection(){
-  if(switching||entering||cafeBusy)return;
+  if(switching||entering||cafeBusy||arcadeBusy||clawState.inGame||arcadeArea==='arcade')return;
   switching=true;const nextKey=collectionKey==='night'?'nature':'night',next=collections[nextKey];
   const botanicalTransition=nextKey==='nature'&&entered&&scene&&!sceneFailed;
   const mode=botanicalTransition?'petals':'dark';
@@ -171,8 +235,11 @@ async function switchCollection(){
   transitionLayer.style.opacity='0';transitionLayer.style.transform='none';
   $('transition-title').textContent=next.label;$('transition-kicker').textContent='NEXT EXHIBITION';
   try{
-    await transitionAnimation([{opacity:0},{opacity:1}],botanicalTransition?250:650);
-    const response=await fetch(next.manifest);if(!response.ok)throw new Error('manifest');
+    const [response]=await Promise.all([
+      fetch(next.manifest),
+      transitionAnimation([{opacity:0},{opacity:1}],botanicalTransition?120:300),
+    ]);
+    if(!response.ok)throw new Error('manifest');
     const nextWorks=await response.json();if(nextWorks.length!==12)throw new Error('count');
     if(scene&&!sceneFailed)await scene.transitionExhibition(nextWorks,next.english,nextKey==='nature',{animate:entered});
     works=nextWorks;collectionKey=nextKey;activeCollection=next;descriptions=next.descriptions;locations=next.locations;
@@ -181,14 +248,11 @@ async function switchCollection(){
     document.querySelector('.index-description').textContent=next.intro;
     document.querySelector('.index-footer').firstChild.textContent=`NAGATA KOSHI — ${next.title}`;
     document.querySelector('.edition').textContent=next.english+' · 12 WORKS';
-    const destination=collections[nextKey==='night'?'nature':'night'];
-    $('switch-label').textContent=destination.switchLabel;
-    $('exhibition-switch').setAttribute('aria-label',`${destination.switchLabel}：${destination.label}に切り替える`);
     $('index-switch').textContent=collections[nextKey==='night'?'nature':'night'].label+'へ ↗';
     $('scene').setAttribute('aria-label',next.label+'、12枚の写真が並ぶ展示室');
     if(entered&&scene&&!sceneFailed)scene.overview(true);
     if((wasIndex&&!entered)||sceneFailed)showIndexAfterSwitch=true;
-    await transitionAnimation([{opacity:1},{opacity:0}],botanicalTransition?400:750);
+    await transitionAnimation([{opacity:1},{opacity:0}],botanicalTransition?260:400);
     announce(next.label+'へ切り替わりました。');
   }catch(error){console.error('Collection switch failed:',error);announce('展示を読み込めませんでした。もう一度お試しください。');}
   finally{
@@ -198,5 +262,4 @@ async function switchCollection(){
   }
 }
 let showIndexAfterSwitch=false;
-$('exhibition-switch').addEventListener('click',switchCollection);
 $('index-switch').addEventListener('click',switchCollection);

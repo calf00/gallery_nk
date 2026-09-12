@@ -4,10 +4,12 @@
  * All objects are owned by this module; dispose() removes and releases them.
  */
 export const treePosition = Object.freeze([1.45, 0, -3.78]);
+export const botanicalTiming = Object.freeze({ growMs: 2200, settleMs: 2500 });
 
 export function createBotanicalScene({ THREE, scene, room, reducedMotion = false }) {
   const WIDTH = room?.width || 4.6, LENGTH = room?.length || 9.4, HEIGHT = room?.height || 2.95;
-  const GROW_MS = 5600, SETTLE_MS = 6000, BURST_COUNT = 336, AMBIENT_COUNT = 28;
+  const GROW_MS = botanicalTiming.growMs, SETTLE_MS = botanicalTiming.settleMs;
+  const BURST_COUNT = 336, AMBIENT_COUNT = 28;
   const PETAL_COUNT = BURST_COUNT + AMBIENT_COUNT;
   const palette = ['#f3bbc9', '#fff0da', '#d4b9e4', '#f5dfa1', '#edbd98'];
   const resources = new Set(), meshes = [], branchSets = [], leaves = [], flowers = [], centres = [];
@@ -34,9 +36,8 @@ export function createBotanicalScene({ THREE, scene, room, reducedMotion = false
   // A tessellated surface, gently cupped and twisted. Each form has a different
   // silhouette, not just a different aspect ratio: notched cherry, round spoon,
   // softly scalloped cosmos, and a narrow drifting petal / lanceolate leaf.
-  function petalGeometry(form) {
+  function petalGeometry(form, rows = 14, columns = 8) {
     const positions = [], colours = [], uv = [], indices = [];
-    const rows = 14, columns = 8;
     for (let j = 0; j <= rows; j++) {
       const t = j / rows;
       for (let i = 0; i <= columns; i++) {
@@ -52,7 +53,7 @@ export function createBotanicalScene({ THREE, scene, room, reducedMotion = false
           width *= 1 + .1 * Math.cos(u * Math.PI * 3) * Math.pow(t, 4);
           y += .026 * Math.cos(u * Math.PI * 3) * Math.sin(t * Math.PI);
         } else {
-          width = .24 * Math.pow(Math.sin(Math.PI * t), .79);
+          width = (form === 4 ? .34 : .24) * Math.pow(Math.sin(Math.PI * t), .79);
           y = 1.08 * t - .45;
         }
         const x = width * u;
@@ -76,6 +77,8 @@ export function createBotanicalScene({ THREE, scene, room, reducedMotion = false
     return geometry;
   }
   const petalGeometries = Array.from({ length: 4 }, (_, i) => petalGeometry(i));
+  // The large ceiling canopy uses just 30 triangles per curved leaf.
+  const canopyLeafGeometry = petalGeometry(4, 5, 3);
   const petalMaterial = own(new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true,
     side: THREE.DoubleSide, roughness: .74, metalness: 0, emissive: '#f1ded2', emissiveIntensity: .055 }));
   const leafMaterial = own(new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true,
@@ -85,111 +88,201 @@ export function createBotanicalScene({ THREE, scene, room, reducedMotion = false
   function instances(name, geometry, material, count, parent = tree) {
     const mesh = new THREE.InstancedMesh(geometry, material, count);
     mesh.name = name; mesh.frustumCulled = false;
-    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.instanceMatrix.setUsage(parent === tree ? THREE.StaticDrawUsage : THREE.DynamicDrawUsage);
     // Small moving petals need no shadow-map pass; the existing lighting shades them.
     mesh.castShadow = false; mesh.receiveShadow = false;
     for (let i = 0; i < count; i++) mesh.setMatrixAt(i, zero);
     parent.add(mesh); meshes.push(mesh); return mesh;
   }
 
-  const trunkSegments = [], smallSegments = [];
+  const smallSegments = [], canopySegments = [], grownSurfaces = [];
   function addSegment(array, a, b, radius, birth, duration) {
     array.push({ a: a.clone(), b: b.clone(), radius, birth, duration });
   }
-  const trunkPoints = [vec(0, .008, 0), vec(.014, .31, .008), vec(-.009, .62, .016),
-    vec(.024, .96, .023), vec(.05, 1.29, .003), vec(.033, 1.6, -.022),
-    vec(.062, 1.89, -.009), vec(.081, 2.14, .013), vec(.058, 2.42, .008)];
-  for (let i = 0; i < trunkPoints.length - 1; i++) {
-    addSegment(trunkSegments, trunkPoints[i], trunkPoints[i + 1], .064 * Math.pow(.9, i), i * .046, .046);
+  const trunkPoints = [vec(0, .008, 0), vec(.014, .31, -.035), vec(-.009, .62, -.13),
+    vec(.024, .96, -.25), vec(.05, 1.29, -.33), vec(.033, 1.6, -.34),
+    vec(.062, 1.89, -.27), vec(.081, 2.14, -.13), vec(.058, 2.42, .008)];
+  // Continuous, gently fluted bark replaces the thin stack of cylinders.
+  const solidBark = own(barkMaterial.clone());solidBark.vertexColors = true;
+  function growingSurface(name, rows, columns, duration, surface) {
+    const positions = new Float32Array((rows + 1) * (columns + 1) * 3);
+    const colors = new Float32Array(positions.length), indices = [];
+    for (let row = 0; row <= rows; row++) for (let col = 0; col <= columns; col++) {
+      const t = row / rows, angle = col / columns * Math.PI * 2;
+      const shade = .81 + .11 * Math.sin(angle * 9 + .3 * Math.sin(t * 7)) + .055 * Math.sin(angle * 17 - t * 2);
+      const offset = (row * (columns + 1) + col) * 3;
+      colors.set([shade, shade * .96, shade * .89], offset);
+      if (row < rows && col < columns) {
+        const a = row * (columns + 1) + col, b = a + columns + 1;
+        indices.push(a, b, a + 1, b, b + 1, a + 1);
+      }
+    }
+    const geometry = own(new THREE.BufferGeometry());
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setIndex(indices);
+    const mesh = new THREE.Mesh(geometry, solidBark);
+    mesh.name = name;mesh.frustumCulled = false;tree.add(mesh);
+    grownSurfaces.push({mesh, rows, columns, duration, surface, progress:-1});
+    return mesh;
   }
-  // Five shallow roots remain within a 0.20 m footprint.
-  for (let i = 0; i < 5; i++) {
-    const a = i / 5 * Math.PI * 2 + .2;
-    addSegment(smallSegments, vec(Math.cos(a) * .019, .065, Math.sin(a) * .019),
-      vec(Math.cos(a) * .176, .012, Math.sin(a) * .176), .023, i * .007, .1);
+  const trunkCurve = new THREE.CatmullRomCurve3(trunkPoints, false, 'centripetal');
+  const trunkRadii = [.40, .285, .25, .225, .21, .195, .18, .15, .10];
+  growingSurface('tapered-tree-trunk', 48, 28, .368, (t, angle) => {
+    const p = trunkCurve.getPoint(t), segment = t * (trunkRadii.length - 1);
+    const i = Math.min(trunkRadii.length - 2, Math.floor(segment));
+    const radius = mix(trunkRadii[i], trunkRadii[i + 1], segment - i);
+    const ridges = 1 + .038 * Math.sin(angle * 9 + t * .55) + .017 * Math.cos(angle * 5 - t * 1.6);
+    return p.add(vec(Math.cos(angle) * radius * ridges, 0, Math.sin(angle) * radius * ridges));
+  });
+  // Seven broad buttress roots emerge from the flare, curve along the floor,
+  // and taper to buried tips. Their lower edges stay on the floor throughout.
+  for (let i = 0; i < 7; i++) {
+    const angle = i / 7 * Math.PI * 2 + .18;
+    const towardAisle = Math.cos(angle) < 0 && Math.sin(angle) > -.2;
+    const reach = towardAisle ? .46 : .75 + .07 * Math.sin(i * 2.7);
+    growingSurface(`buttress-root-${i + 1}`, 20, 16, .19, (t, crossAngle) => {
+      const bend = angle + .18 * Math.sin(t * Math.PI) * (i % 2 ? -1 : 1);
+      const r = .075 + reach * t;
+      const width = .19 * Math.pow(1 - t, 1.2) + .006;
+      const height = .14 * Math.pow(1 - t, 1.7) + .002;
+      return vec(Math.cos(bend) * r - Math.sin(bend) * Math.cos(crossAngle) * width,
+        .002 + height * (1 + Math.sin(crossAngle)),
+        Math.sin(bend) * r + Math.cos(bend) * Math.cos(crossAngle) * width);
+    });
   }
-  function addLeaf(position, size, birth, angle) {
-    const rotation = new THREE.Euler(mix(.35, 2.55, random()), angle + mix(-.4, .4, random()),
-      mix(-.8, .8, random()));
-    leaves.push({ position: position.clone(), rotation, size, birth,
-      color: ['#71876a', '#8e9c70', '#a8b78a', '#829879'][Math.floor(random() * 4)] });
+  const localPoint = world => vec((world.x - treePosition[0]) / .8, world.y, (world.z - treePosition[2]) / .8);
+  const worldPoint = local => vec(local.x * .8 + treePosition[0], local.y, local.z * .8 + treePosition[2]);
+  const leafVertex = new THREE.Vector3(), leafRotation = new THREE.Quaternion();
+  const leafVertices = canopyLeafGeometry.getAttribute('position');
+  function addLeaf(worldPosition, size, birth, angle) {
+    // Mostly horizontal, with enough pitch and roll to read as individual leaves.
+    const rotation = new THREE.Euler(-Math.PI / 2 + mix(-.34, .34, random()),
+      angle + mix(-.45, .45, random()), mix(-.22, .22, random()), 'YXZ');
+    leafRotation.setFromEuler(rotation);
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (let i = 0; i < leafVertices.count; i++) {
+      leafVertex.fromBufferAttribute(leafVertices, i).multiply(vec(size * 1.5, size, size)).applyQuaternion(leafRotation);
+      leafVertex.x *= .8; leafVertex.z *= .8;
+      minX = Math.min(minX, leafVertex.x); maxX = Math.max(maxX, leafVertex.x);
+      minY = Math.min(minY, leafVertex.y); maxY = Math.max(maxY, leafVertex.y);
+      minZ = Math.min(minZ, leafVertex.z); maxZ = Math.max(maxZ, leafVertex.z);
+    }
+    // Constrain actual leaf vertices, not just their centres, to the room and the
+    // overhead band. This keeps the photos, café opening and wall panel clear.
+    const p = worldPosition.clone();
+    p.x = clamp(p.x, -WIDTH / 2 + .035 - minX, WIDTH / 2 - .035 - maxX);
+    p.z = clamp(p.z, -LENGTH / 2 + .035 - minZ, LENGTH / 2 - .035 - maxZ);
+    p.y = clamp(p.y, 2.45 - minY, Math.min(2.8, HEIGHT - .12) - maxY);
+    leaves.push({ position: localPoint(p), rotation, size, birth,
+      color: ['#496e50', '#64875b', '#839d6d', '#a1b582'][Math.floor(random() * 4)] });
   }
   function addFlower(position, size, birth) {
-    const axis = new THREE.Quaternion().setFromEuler(new THREE.Euler(mix(-1.25, 1.25, random()),
+    const axis = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2 + random() * .45,
       random() * Math.PI * 2, random() * Math.PI * 2));
     for (let i = 0; i < 5; i++) {
       const angle = i / 5 * Math.PI * 2;
       const offset = vec(Math.sin(angle) * size * .18, Math.cos(angle) * size * .18, 0).applyQuaternion(axis);
       const rotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(.24, 0, -angle)).premultiply(axis);
       flowers.push({ position: position.clone().add(offset), quaternion: rotation, size,
-        birth: birth + random() * .024, color: random() < .48 ? '#f1ccd5' : '#f7e9d3' });
+        birth: birth + random() * .018, color: random() < .48 ? '#f1ccd5' : '#f7e9d3' });
     }
     centres.push({ position: position.clone(), size: size * .11, birth: birth + .02 });
   }
-  // Open, ascending branches keep almost all of the foliage above artwork level.
-  // Secondary twigs carry spaced pairs of leaves, rather than opaque canopy blobs.
-  for (let b = 0; b < 10; b++) {
-    const angle = b * 2.399963 + .3;
-    const reach = mix(.57, .79, random()), baseY = mix(1.76, 2.09, b / 9);
-    const root = vec(.05, baseY, -.005), points = [root];
-    for (let j = 1; j <= 5; j++) {
-      const t = j / 5, bend = angle + .15 * Math.sin(t * Math.PI);
-      points.push(vec(root.x + Math.cos(bend) * reach * t,
-        baseY + (.30 + .15 * (1 - b / 9)) * Math.sin(t * Math.PI * .53),
-        root.z + Math.sin(bend) * reach * t));
-      addSegment(smallSegments, points[j - 1], points[j], .022 * Math.pow(.74, j - 1),
-        .37 + b * .009 + (j - 1) * .045, .045);
+
+  // Four continuous boughs fan out from the existing leader. Three travel the
+  // room's length; the fourth reaches across its rear. Smaller branches attach
+  // at real bough vertices, so the canopy grows outward from the tree.
+  const leader = worldPoint(trunkPoints.at(-1)), spines = [];
+  const destinations = [
+    vec(-WIDTH / 2 + .52, 2.66, LENGTH / 2 - .4),
+    vec(-.05, 2.67, LENGTH / 2 - .38),
+    vec(WIDTH / 2 - .47, 2.65, LENGTH / 2 - .4),
+    vec(-WIDTH / 2 + .4, 2.64, -LENGTH / 2 + .37),
+  ];
+  for (const [index, destination] of destinations.entries()) {
+    const points = [leader.clone()];
+    for (let i = 1; i <= 4; i++) {
+      const t = i / 4, point = leader.clone().lerp(destination, t);
+      point.y = mix(leader.y, destination.y, Math.sin(t * Math.PI / 2));
+      point.x += Math.sin(t * Math.PI) * (index % 2 ? .13 : -.13);
+      points.push(point);
     }
-    for (let t = 2; t <= 5; t++) {
-      const point = points[t];
-      const twigAngle = angle + (t % 2 ? -.69 : .72);
-      const twigReach = mix(.14, .24, random());
-      const tip = point.clone().add(vec(Math.cos(twigAngle) * twigReach,
-        mix(.06, .15, random()), Math.sin(twigAngle) * twigReach));
-      // Keep the crown within its 0.85 m radius and below 2.55 m.
-      const radius = Math.hypot(tip.x - .05, tip.z);
-      if (radius > .81) { tip.x = .05 + (tip.x - .05) * .81 / radius; tip.z *= .81 / radius; }
-      tip.y = Math.min(2.45, tip.y);
-      const mid = point.clone().lerp(tip, .52); mid.y += .018;
-      const birth = .57 + t * .023 + b * .004;
-      addSegment(smallSegments, point, mid, .0066, birth, .055);
-      addSegment(smallSegments, mid, tip, .0049, birth + .055, .09);
-      for (let l = 0; l < 6; l++) {
-        const s = .18 + l * .15;
-        const anchor = point.clone().lerp(tip, s);
-        for (const side of [-1, 1]) {
-          const leafPosition = anchor.clone().add(vec(Math.cos(twigAngle + Math.PI / 2) * .027 * side,
-            .008, Math.sin(twigAngle + Math.PI / 2) * .027 * side));
-          addLeaf(leafPosition, mix(.095, .15, random()), birth + .09 + s * .085,
-            twigAngle + side * .84);
-        }
-      }
-      if ((b + t) % 3 !== 1) addFlower(tip, mix(.033, .048, random()), birth + .2);
+    const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
+    const spine = [], segments = index === 3 ? 10 : 20;
+    for (let i = 0; i <= segments; i++) {
+      const arrival = .37 + i / segments * .31;
+      spine.push({ point: curve.getPoint(i / segments), arrival });
+      if (i) addSegment(canopySegments, localPoint(spine[i - 1].point), localPoint(spine[i].point),
+        .09 * Math.pow(.85, i - 1), spine[i - 1].arrival, .31 / segments);
     }
-    addLeaf(points[5], .13, .79 + random() * .09, angle);
+    spines.push(spine);
   }
-  // A few small, upright leaves finish the leader at a total height of ~2.50 m.
-  for (let i = 0; i < 12; i++) {
-    const a = i * 2.4;
-    addLeaf(vec(.058 + Math.cos(a) * .032, 2.37 + i * .006, Math.sin(a) * .032),
-      mix(.08, .105, random()), .83 + random() * .07, a);
+
+  // Each region receives six sprays of four leaves. Their overlapping, irregular
+  // silhouettes form a dense ceiling while remaining a single instanced draw.
+  const columns = 9, rows = 19;
+  for (let zIndex = 0; zIndex < rows; zIndex++) for (let xIndex = 0; xIndex < columns; xIndex++) {
+    const x = mix(-WIDTH / 2 + .30, WIDTH / 2 - .30, xIndex / (columns - 1)) + mix(-.045, .045, random());
+    const z = mix(-LENGTH / 2 + .30, LENGTH / 2 - .30, zIndex / (rows - 1)) + mix(-.045, .045, random());
+    const centre = vec(x, 2.645 + .025 * Math.sin(x * 2.1 + z * .8), z);
+    let anchor = null, distance = Infinity;
+    for (const spine of spines) for (const node of spine.slice(1)) {
+      const d = Math.hypot(node.point.x - x, node.point.z - z);
+      if (d < distance) { distance = d; anchor = node; }
+    }
+    const mid = anchor.point.clone().lerp(centre, .52); mid.y = Math.max(2.49, mid.y - .018);
+    const arrival = anchor.arrival + .004;
+    addSegment(smallSegments, localPoint(anchor.point), localPoint(mid), .0105, arrival, .027);
+    addSegment(smallSegments, localPoint(mid), localPoint(centre), .0078, arrival + .027, .027);
+    const offset = random() * Math.PI * 2;
+    for (let spray = 0; spray < 6; spray++) {
+      const angle = offset + spray * Math.PI / 3;
+      const tip = centre.clone().add(vec(Math.cos(angle) * .25, mix(-.028, .02, random()), Math.sin(angle) * .25));
+      tip.x = clamp(tip.x, -WIDTH / 2 + .16, WIDTH / 2 - .16);
+      tip.z = clamp(tip.z, -LENGTH / 2 + .16, LENGTH / 2 - .16);
+      addSegment(smallSegments, localPoint(centre), localPoint(tip), .0038, arrival + .054, .025);
+      for (let l = 0; l < 4; l++) {
+        const p = centre.clone().lerp(tip, .28 + l * .24);
+        const side = l % 2 ? 1 : -1;
+        p.x += Math.cos(angle + Math.PI / 2) * .05 * side;
+        p.z += Math.sin(angle + Math.PI / 2) * .05 * side;
+        p.y += mix(-.025, .025, random());
+        addLeaf(p, mix(.31, .46, random()), arrival + .079 + l * .015 + random() * .025, angle + side * .58);
+      }
+    }
+    if ((xIndex + zIndex) % 5 === 0) addFlower(localPoint(centre), .044, arrival + .12);
   }
   const trunkGeometry = own(new THREE.CylinderGeometry(.9, 1, 1, 10, 1));
   const branchGeometry = own(new THREE.CylinderGeometry(.74, 1, 1, 8, 1));
-  branchSets.push({ mesh: instances('tapered-tree-trunk', trunkGeometry, barkMaterial, trunkSegments.length), data: trunkSegments });
+  branchSets.push({ mesh: instances('connected-ceiling-boughs', trunkGeometry, barkMaterial, canopySegments.length), data: canopySegments });
   branchSets.push({ mesh: instances('tapered-branches-and-roots', branchGeometry, barkMaterial, smallSegments.length), data: smallSegments });
-  const leafMesh = instances('small-curved-leaves', petalGeometries[3], leafMaterial, leaves.length);
+  const leafMesh = instances('small-curved-leaves', canopyLeafGeometry, leafMaterial, leaves.length);
   const flowerMesh = instances('five-petal-tree-blossoms', petalGeometries[0], petalMaterial, flowers.length);
   const centreGeometry = own(new THREE.SphereGeometry(1, 6, 4));
   const centreMesh = instances('flower-centres', centreGeometry, centreMaterial, centres.length);
   leaves.forEach((leaf, i) => leafMesh.setColorAt(i, colour.set(leaf.color)));
   flowers.forEach((flower, i) => flowerMesh.setColorAt(i, colour.set(flower.color)));
-  const shadow = new THREE.Mesh(own(new THREE.CircleGeometry(.19, 32)), own(new THREE.MeshBasicMaterial({
-    color: '#394636', transparent: true, opacity: .11, depthWrite: false })));
-  shadow.name = 'small-root-contact-shadow'; shadow.rotation.x = -Math.PI / 2; shadow.position.y = .003; tree.add(shadow);
+  const shadow = new THREE.Group();shadow.name = 'root-contact-shadow';tree.add(shadow);
+  for (const [radius, opacity] of [[.76,.025],[.55,.045],[.35,.09]]) {
+    const patch = new THREE.Mesh(own(new THREE.CircleGeometry(radius, 48)), own(new THREE.MeshBasicMaterial({
+      color:'#18251c', transparent:true, opacity, depthWrite:false })));
+    patch.rotation.x = -Math.PI / 2;patch.position.y = .001;shadow.add(patch);
+  }
 
   function growTree(amount) {
     growth = clamp(amount, 0, 1);
+    for (const item of grownSurfaces) {
+      const progress = smooth(growth / item.duration);
+      if (progress === item.progress) continue;
+      item.progress = progress;item.mesh.visible = progress > 0;
+      const positions = item.mesh.geometry.getAttribute('position');
+      for (let row = 0; row <= item.rows; row++) for (let col = 0; col <= item.columns; col++) {
+        const p = item.surface(Math.min(row / item.rows, progress), col / item.columns * Math.PI * 2);
+        positions.setXYZ(row * (item.columns + 1) + col, p.x, p.y, p.z);
+      }
+      positions.needsUpdate = true;item.mesh.geometry.computeVertexNormals();
+    }
     for (const { mesh, data } of branchSets) {
       data.forEach((branch, i) => {
         const k = smooth((growth - branch.birth) / branch.duration);
@@ -235,7 +328,7 @@ export function createBotanicalScene({ THREE, scene, room, reducedMotion = false
       scattered ? mix(.22, ceiling - .03, random()) : ceiling - random() * .09,
       mix(-zLimit + .08, zLimit - .08, random()));
     petal.rotation.set(random() * Math.PI * 2, random() * Math.PI * 2, random() * Math.PI * 2);
-    petal.velocity.set(mix(-.065, .065, random()), petal.ambient ? mix(.16, .24, random()) : mix(.49, .70, random()), mix(-.06, .06, random()));
+    petal.velocity.set(mix(-.065, .065, random()), petal.ambient ? mix(.16, .24, random()) : mix(1.2, 1.6, random()), mix(-.06, .06, random()));
     petal.spin.set(mix(-1.45, 1.45, random()), mix(-.9, .9, random()), mix(-.9, .9, random()));
     petal.size = mix(.045, .096, random()); petal.flutter = random() * Math.PI * 2;
     if (petal.form === 3) petal.size *= 1.15;
@@ -263,7 +356,7 @@ export function createBotanicalScene({ THREE, scene, room, reducedMotion = false
     });
   }
   function resetPetals() {
-    for (const petal of petals) { petal.active = false; petal.release = random() * 1250; }
+    for (const petal of petals) { petal.active = false; petal.release = random() * 650; }
     activePetals = 0; petalBatches.forEach(mesh => { mesh.count = 0; });
   }
   function staticDisplay() {
@@ -277,7 +370,7 @@ export function createBotanicalScene({ THREE, scene, room, reducedMotion = false
     group.visible = true; elapsed = 0; phase = 'growing'; resetPetals();
     if (reducedMotion) { staticDisplay(); return; }
     growTree(0);
-    // The burst begins at the ceiling and is released over its first 1.25 s.
+    // The burst begins at the ceiling and is released over its first 650 ms.
     // Its full population never appears as an opaque sheet in front of the camera.
     for (let i = 0; i < 20; i++) petals[i].release = 0;
     drawPetals();
