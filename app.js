@@ -68,7 +68,7 @@ if(matchMedia('(max-width:700px), (max-height:650px)').matches)toggleMap(false);
 function syncCafe({area,busy}){
   cafeArea=area;cafeBusy=busy;
   gallery.classList.toggle('in-cafe',area==='cafe');gallery.classList.toggle('cafe-busy',busy);
-  $('cafe-controls').hidden=area!=='cafe';$('cafe-return').disabled=busy;
+  $('cafe-controls').hidden=area!=='cafe';
   $('coffee-tap').disabled=busy;$('index-button').disabled=busy||entering;
   $('coffee-cup').disabled=busy||coffeeState==='sipping';
   $('coffee-status').textContent=coffeeState==='pouring'?'コーヒーを注いでいます…':busy?'移動しています…':coffeeState==='empty'?'マシンをタップして、一杯どうぞ。':'コーヒーと一緒に、ゆっくりどうぞ。';
@@ -81,7 +81,6 @@ function syncCoffee(state){
 }
 $('cafe-entry').addEventListener('click',()=>scene?.visitCafe());
 $('coffee-tap').addEventListener('click',()=>scene?.pourCoffee());
-$('cafe-return').addEventListener('click',()=>scene?.faceCafeDoor());
 $('cafe-exit').addEventListener('click',()=>scene?.leaveCafe());
 $('coffee-cup').addEventListener('click',()=>scene?.sipCoffee());
 function buildCollection(){
@@ -139,7 +138,6 @@ async function init(){
           for(const [id,point] of [['cafe-entry',portal],['cafe-exit',exit],['coffee-tap',machine],['exhibition-switch',exhibitionPortal]]){
             const button=$(id);button.hidden=!point.visible||switching;button.style.left=id==='exhibition-switch'?`clamp(calc(var(--switch-width)/2 + 10px), ${point.x}px, calc(100% - var(--switch-width)/2 - 10px))`:`${point.x}px`;button.style.top=`${point.y}px`;
           }
-          $('cafe-return').hidden=exit.visible;
           if(cafeArea==='cafe'&&!cafeBusy){
             const message=exit.visible?'ガラスの扉をタップして、展示室へ。':coffeeState==='empty'?'マシンをタップして、一杯どうぞ。':'コーヒーと一緒に、ゆっくりどうぞ。';
             if($('coffee-status').textContent!==message)$('coffee-status').textContent=message;
