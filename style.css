@@ -127,7 +127,6 @@
 .arcade-controls{position:absolute;inset:0;pointer-events:none;z-index:3}
 .arcade-controls button{pointer-events:auto;border:1px solid #e5e9dd5c;background:#142224d9;backdrop-filter:blur(12px);min-height:46px;border-radius:6px;font-size:13px}
 .arcade-back{position:absolute;left:22px;top:25px;padding:10px 16px}
-.arcade-start{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);padding:13px 25px;white-space:nowrap}
 .arcade-travel-status{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);font-size:13px;white-space:nowrap;text-shadow:0 1px 8px #101a1b}
 .claw-controls{position:absolute;inset:0;pointer-events:none;z-index:5}
 .claw-close{pointer-events:auto;position:absolute;top:22px;right:22px;width:44px;height:44px;border-radius:50%;background:#171e27cf;border:1px solid #f8d7e855;font:28px Arial;color:#fff5f8}

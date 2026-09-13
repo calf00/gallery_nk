@@ -8,7 +8,7 @@ const eye = entrance.eyeHeight;
 export const arcadeHall = Object.freeze({
   width: 8.8, height: 2.95, nearZ: 4.7, farZ: 9.8,
   viewPosition: Object.freeze([-.65, eye, 6.5]),
-  viewTarget: Object.freeze([-3.5, 1.45, 6.5]),
+  viewTarget: Object.freeze([-.65, 1.52, 10.1]),
   openMs: 700, closeMs: 700,
 });
 export const arcadeExit = Object.freeze({x:3.05,z:9.8,width:1.02,height:2.3});
@@ -92,8 +92,12 @@ export function sampleArcadeJourney(path, elapsed) {
   } else if (elapsed < closeAt) {
     const amount = smooth((elapsed - crossAt) / crossMs);
     position = path.crossing.getPointAt(amount);
-    target = forwardTarget(path.crossing, amount, position);
-    target.lerp(finalTarget, smooth((amount - .55) / .45));
+    if (direction === 'out') {
+      target = position.clone().add(new THREE.Vector3(0, -.10, 3.6));
+    } else {
+      target = forwardTarget(path.crossing, amount, position);
+      target.lerp(finalTarget, smooth((amount - .55) / .45));
+    }
     doorAngle = entrance.openAngle; phase = 'crossing';
   } else {
     position = path.crossing.getPointAt(1); target = finalTarget;

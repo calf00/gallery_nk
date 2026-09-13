@@ -116,13 +116,14 @@ export function createCafe({scene,room,box,plane,material,canvasTexture,disposab
   let state='empty',elapsed=0,hudBounds=null;
   const notify=()=>onCoffee?.(state);
   function setDoor(progress){door.position.x=-(opening+.06)*progress;}
-  function reset(){state='empty';elapsed=0;setDoor(0);stream.visible=false;served.group.visible=true;served.liquid.position.y=.03;held.group.visible=false;notify();}
+  function reset(){state='empty';elapsed=0;setDoor(0);stream.visible=false;served.group.visible=true;served.liquid.position.y=.03;served.liquid.scale.set(.77,1,.77);held.group.visible=false;notify();}
   function pour(){if(state!=='empty')return false;state='pouring';elapsed=0;stream.visible=true;notify();return true;}
   function sip(){if(state!=='held')return false;state='sipping';elapsed=0;notify();return true;}
   function tick(delta){
     if(state==='pouring'){
       elapsed+=delta;const t=Math.min(1,elapsed/pourDuration),fill=.95+.155*t;
       served.liquid.position.y=.03+.292*t;
+      served.liquid.scale.set(.77+.23*t,1,.77+.23*t);
       stream.scale.y=Math.max(.001,1.242-fill);stream.position.y=(1.242+fill)/2;
       if(t===1){stream.visible=false;served.group.visible=false;state='held';elapsed=0;held.group.visible=true;notify();}
     }else if(state==='sipping'){

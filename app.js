@@ -94,10 +94,6 @@ function applyClawInput(){
   }
 }
 function stopClawInput(){clawHeld.clear();clawKeys.clear();scene?.stopClaw();for(const button of document.querySelectorAll('[data-claw-axis]'))button.classList.remove('held');}
-function syncPrizeButton(){
-  $('arcade-start').hidden=clawState.phase==='won'&&questState.phase!=='empty';
-  $('arcade-start').textContent=clawState.phase==='won'?'ピンを取る':'タッチしてあそぶ';
-}
 function syncQuest(state){
   questState=state;gallery.classList.toggle('quest-busy',state.busy);gallery.classList.toggle('escaped',state.escaped);
   $('held-item').hidden=!state.item;$('held-pin').toggleAttribute('hidden',state.item!=='pin');$('held-key').toggleAttribute('hidden',state.item!=='key');
@@ -105,13 +101,12 @@ function syncQuest(state){
   $('held-item').setAttribute('aria-label',state.item==='key'?'持っている鍵':'持っているピン');
   $('exchange-action').textContent=state.phase==='key-ready'?'鍵を取る':'ピンを入れる';
   if(state.busy||state.escaped)$('exchange-action').hidden=true;
-  $('escape-ending').hidden=!state.escaped;syncPrizeButton();
+  $('escape-ending').hidden=!state.escaped;
 }
 function syncArcade({area,busy}){
   arcadeArea=area;arcadeBusy=busy;$('index-switch').disabled=area==='arcade'||busy;
   gallery.classList.toggle('in-arcade',area==='arcade');gallery.classList.toggle('arcade-travelling',busy);
   $('arcade-controls').hidden=area!=='arcade'||busy||clawState.inGame;
-  syncPrizeButton();
   $('arcade-return').disabled=busy;$('index-button').disabled=busy||clawState.inGame||cafeBusy||entering;
   $('arcade-travel-status').hidden=!busy;
   $('scene').querySelector('canvas')?.setAttribute('aria-label',area==='arcade'?'UFOキャッチャー。タッチ、またはEnterキーでゲーム開始。':'3D展示室。ドラッグで見回す。入口の扉をタップすると廊下へ。');
@@ -127,12 +122,10 @@ function syncClaw(state){
   for(const button of document.querySelectorAll('[data-claw-axis]'))button.disabled=!state.canMove;
   $('claw-status').textContent=state.canMove?'押している間、移動':state.phase==='won'?'':'つかんでいます…';
   $('arcade-controls').hidden=arcadeArea!=='arcade'||arcadeBusy||state.inGame;
-  syncPrizeButton();
   $('index-button').disabled=arcadeBusy||state.inGame||cafeBusy||entering;
 }
 $('hallway-button').addEventListener('click',()=>scene?.visitArcade());
 $('arcade-return').addEventListener('click',()=>scene?.leaveArcade());
-$('arcade-start').addEventListener('click',()=>clawState.phase==='won'?scene?.collectPrize():scene?.startClaw());
 $('arcade-exit').addEventListener('click',()=>scene?.exitArcade());
 $('exchange-action').addEventListener('click',()=>scene?.exchangePin());
 $('held-item').addEventListener('click',()=>{
@@ -206,7 +199,7 @@ async function init(){
     const response=await fetch('./assets/manifest.json');if(!response.ok)throw new Error('manifest');works=await response.json();if(works.length!==12)throw new Error('count');buildCollection();
     const slow=setTimeout(()=>{$('load-status').textContent='読み込み中です。右上の作品一覧からも鑑賞できます。';},10000);
     try{
-      const {createGalleryScene}=await import('./scene.js?v=20260913-escape');
+      const {createGalleryScene}=await import('./scene.js?v=20260913-ivy');
       scene=await createGalleryScene($('scene'),works,{
         onProgress(n,total){$('load-status').textContent=`展示室を準備中 ${n} / ${total}`;},
         onEnterRequest:enter,

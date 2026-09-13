@@ -3,7 +3,7 @@ import { exhibition, room, printSize, fittedImage, placement } from './config.js
 import { entrance, createEntryPath, sampleEntry } from './entry-path.js?v=20260912-arcade';
 import { createCafe, cafePath, cafePose, cafeDoor } from './cafe.js?v=20260913-escape';
 import { createBotanicalScene, botanicalTiming } from './botanical.js?v=20260913-garden';
-import { createNatureRoom } from './nature-room.js?v=20260913-garden';
+import { createNatureRoom } from './nature-room.js?v=20260913-ivy';
 import { createClawMachine } from './claw-machine.js?v=20260913-escape';
 import { arcadeExit, createArcadeHall, createArcadePath, sampleArcadeJourney } from './arcade-hall.js?v=20260913-escape';
 import { createDoorShadow } from './door-shadow.js?v=20260913-arm';
