@@ -55,12 +55,12 @@ export function createCafe({scene,room,box,plane,material,canvasTexture,disposab
     box(.6,.69,.018,material('#2c3333'),x,.41,end+.625);
     box(.16,.013,.022,steel,x,.69,end+.645);
   }
-  // Sink and tap, and the tall water dispenser beside the coffee machine.
+  // Sink and tap, and the black exchange box beside the coffee machine.
   box(.46,.012,.3,steel,-.9,.874,end+.36);
   box(.36,.014,.22,darkMetal,-.9,.88,end+.36);
   cylinder(.016,.016,.23,steel,-.9,.97,end+.16);
   box(.032,.032,.14,steel,-.9,1.08,end+.22);
-  box(.32,.81,.37,steel,1.07,1.275,end+.3);
+  box(.32,.81,.37,steel,1.07,1.275,end+.3).name='pin-exchange-box';
   box(.28,.4,.025,charcoal,1.07,1.33,end+.5);
   box(.2,.11,.025,darkMetal,1.07,1.63,end+.5);
   // Small table at the left; keep the passage to the counter open.
@@ -141,7 +141,7 @@ export function createCafe({scene,room,box,plane,material,canvasTexture,disposab
     hudBounds={x:x-scale*.135,y:h-reserve-cupH-15,width:scale*.33,height:cupH+30,baseY};
   }
   reset();
-  return {portal,exitPortal,machineTarget,portalHint:new THREE.Vector3(0,2.55,back+.1),exitHint:new THREE.Vector3(0,1.7,back-.14),machineHint:new THREE.Vector3(mx,1.74,front+.15),hud,hudCamera,
+  return {portal,exitPortal,machineTarget,exchangePosition:new THREE.Vector3(1.07,1.30,end+.53),portalHint:new THREE.Vector3(0,2.55,back+.1),exitHint:new THREE.Vector3(0,1.7,back-.14),machineHint:new THREE.Vector3(mx,1.74,front+.15),hud,hudCamera,
     get state(){return state;},get bounds(){return hudBounds;},reset,pour,sip,tick,resize,setDoor,
     draw(renderer){if(state==='held'||state==='sipping'){renderer.autoClear=false;renderer.clearDepth();renderer.render(hud,hudCamera);renderer.autoClear=true;}},
   };

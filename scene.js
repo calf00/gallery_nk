@@ -1,10 +1,14 @@
 import * as THREE from './vendor/three.module.min.js';
-import { room, printSize, fittedImage, placement } from './config.js?v=20260911-entry';
+import { exhibition, room, printSize, fittedImage, placement } from './config.js?v=20260913-garden';
 import { entrance, createEntryPath, sampleEntry } from './entry-path.js?v=20260912-arcade';
-import { createCafe, cafePath, cafePose, cafeDoor } from './cafe.js?v=20260912-viewing-ui';
-import { createBotanicalScene, botanicalTiming } from './botanical.js?v=20260912-solid-tree';
-import { createClawMachine } from './claw-machine.js?v=20260912-arcade';
-import { createArcadeHall, createArcadePath, sampleArcadeJourney } from './arcade-hall.js?v=20260912-arcade';
+import { createCafe, cafePath, cafePose, cafeDoor } from './cafe.js?v=20260913-escape';
+import { createBotanicalScene, botanicalTiming } from './botanical.js?v=20260913-garden';
+import { createNatureRoom } from './nature-room.js?v=20260913-garden';
+import { createClawMachine } from './claw-machine.js?v=20260913-escape';
+import { arcadeExit, createArcadeHall, createArcadePath, sampleArcadeJourney } from './arcade-hall.js?v=20260913-escape';
+import { createDoorShadow } from './door-shadow.js?v=20260913-arm';
+
+import { createEscapeQuest } from './escape-quest.js?v=20260913-escape';
 
 // The room is authored in metres; artwork paper sizes are true A2.
 export async function createGalleryScene(container, works, callbacks = {}) {
@@ -24,12 +28,13 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   container.appendChild(canvas);
   let entered = false, selected = -1, raf = 0, tween = null, suspended = false, lost = false;
   let entryJourney=null,lastFrame=null,ready=false,journey=null,area='gallery';
-  let arcadeJourney=null;
+  let arcadeJourney=null,exitJourney=null;
   const disposables = [], hitTargets = [], occluders = [], entranceTargets=[];
   const motionPreference=matchMedia('(prefers-reduced-motion: reduce)');
   const botanical=createBotanicalScene({THREE,scene,room,reducedMotion:motionPreference.matches});
+  const natureRoom=createNatureRoom({THREE,scene,room});
   let natureActive=false,exhibitionJourney=null;
-  const onMotionChange=()=>{botanical.setReducedMotion(motionPreference.matches);requestFrame();};
+  const onMotionChange=()=>{botanical.setReducedMotion(motionPreference.matches);doorShadow.setReducedMotion(motionPreference.matches);requestFrame();};
   motionPreference.addEventListener?.('change',onMotionChange);
   function requestFrame() { if (!raf && !suspended && !lost) raf = requestAnimationFrame(render); }
   function render(now) {
@@ -41,7 +46,7 @@ export async function createGalleryScene(container, works, callbacks = {}) {
       const pose=sampleEntry(entryJourney.path,entryJourney.elapsed);
       leftDoor.rotation.y=pose.doorAngle;rightDoor.rotation.y=-pose.doorAngle;
       camera.position.copy(pose.position);camera.lookAt(pose.target);
-      if(pose.complete){entryJourney=null;entered=true;if(natureActive)botanical.start();canvas.style.cursor='grab';canvas.setAttribute('aria-label','3D展示室。ドラッグで見回す。左右の矢印キーで作品を巡る。');callbacks.onEntered?.();}
+      if(pose.complete){entryJourney=null;entered=true;doorShadow.arm();if(natureActive){botanical.start();natureRoom.setActive(true);}canvas.style.cursor='grab';canvas.setAttribute('aria-label','3D展示室。ドラッグで見回す。左右の矢印キーで作品を巡る。');callbacks.onEntered?.();}
     }
     if(journey){
       journey.elapsed+=delta;
@@ -55,11 +60,28 @@ export async function createGalleryScene(container, works, callbacks = {}) {
     if(arcadeJourney){
       arcadeJourney.elapsed+=delta;
       const pose=sampleArcadeJourney(arcadeJourney.path,arcadeJourney.elapsed);
+      // Approach fades the wave away; opening clears any remaining opacity.
+      if(arcadeJourney.direction==='out'&&pose.phase!=='approach')doorShadow.dismiss();
       camera.position.copy(pose.position);camera.lookAt(pose.target);
+      // Keep the greeting in view while approaching around the seats, instead
+      // of turning sideways with the first segment of the walking route.
+      if(arcadeJourney.direction==='out'&&pose.phase==='approach')camera.lookAt(0,1.50,entryZ);
       const lensT=Math.min(1,arcadeJourney.elapsed/arcadeJourney.path.duration);
       camera.fov=THREE.MathUtils.lerp(arcadeJourney.fovFrom,arcadeJourney.direction==='out'?68:(container.getBoundingClientRect().width<700?59:55),lensT);camera.updateProjectionMatrix();
       leftDoor.rotation.y=pose.doorAngle;rightDoor.rotation.y=-pose.doorAngle;
       if(pose.complete){const {direction,done}=arcadeJourney;arcadeJourney=null;area=direction==='out'?'arcade':'gallery';notifyArcade();notifyCafe();done?.();}
+    }
+    if(exitJourney){
+      exitJourney.elapsed+=delta;
+      const elapsed=exitJourney.elapsed,ease=t=>{t=THREE.MathUtils.clamp(t,0,1);return t*t*(3-2*t);};
+      const approach=new THREE.Vector3(arcadeExit.x,entrance.eyeHeight,arcadeExit.z-.8);
+      if(elapsed<1600){
+        const t=ease(elapsed/1600);camera.position.lerpVectors(exitJourney.from,approach,t);camera.quaternion.slerpQuaternions(exitJourney.qFrom,exitJourney.qTo,t);
+      }else{
+        arcadeHall.setExitOpen(ease((elapsed-1600)/700));
+        camera.position.copy(approach);camera.position.z=THREE.MathUtils.lerp(approach.z,arcadeExit.z+1.3,ease((elapsed-2300)/1400));camera.quaternion.copy(exitJourney.qTo);
+      }
+      if(elapsed>=3700){exitJourney=null;quest.finishExit();notifyArcade();}
     }
     if (tween) {
       tween.elapsed+=delta;const t = Math.min(1,tween.elapsed/tween.duration), e = t*t*(3-2*t);
@@ -79,8 +101,10 @@ export async function createGalleryScene(container, works, callbacks = {}) {
     const coffeeAnimating=cafe.tick(delta);
     const petalsAnimating=botanical.tick(delta);
     const clawAnimating=claw.tick(delta);
+    const questAnimating=quest.tick(delta);
+    const shadowAnimating=doorShadow.tick(delta,{camera,eligible:entered&&area==='gallery'&&!entryJourney&&leftDoor.rotation.y===0&&rightDoor.rotation.y===0});
     renderer.render(scene,camera);if(area!=='arcade'&&!arcadeJourney)cafe.draw(renderer);updateCafeHints();
-    if (tween||entryJourney||journey||arcadeJourney||exhibitionJourney||coffeeAnimating||petalsAnimating||clawAnimating) requestFrame();else lastFrame=null;
+    if (tween||entryJourney||journey||arcadeJourney||exitJourney||exhibitionJourney||coffeeAnimating||petalsAnimating||clawAnimating||shadowAnimating||questAnimating) requestFrame();else lastFrame=null;
   }
   function material(color, props={}) { const m=new THREE.MeshStandardMaterial({color,roughness:.86,...props});disposables.push(m);return m; }
   function box(w,h,d,mat,x,y,z,parent=scene) {
@@ -205,14 +229,18 @@ export async function createGalleryScene(container, works, callbacks = {}) {
     return pivot;
   }
   const leftDoor=makeDoor(-1),rightDoor=makeDoor(1);
+  const doorShadow=createDoorShadow({scene,doorZ:entryZ,reducedMotion:motionPreference.matches});
   const arcadeHall=createArcadeHall({scene});occluders.push(...arcadeHall.occluders);
   const claw=createClawMachine({scene,onState:state=>callbacks.onClawState?.(state),onWin:()=>callbacks.onClawWin?.()});
+  const quest=createEscapeQuest({scene,exchangePosition:cafe.exchangePosition,onChange:state=>callbacks.onQuestState?.(state)});
+  const questBusy=()=>quest.state.busy||quest.state.escaped;
   for(const object of entranceTargets)object.userData.action='entrance';
-  const entrySign=canvasTexture(1024,256,ctx=>{
+  function drawEntrySign(ctx,title){
     ctx.fillStyle='#182829';ctx.fillRect(0,0,1024,256);ctx.textAlign='center';ctx.fillStyle='#e9ecdf';
-    ctx.font='65px "Hiragino Mincho ProN", serif';ctx.fillText('鳥瞰図',512,108);
+    ctx.font='65px "Hiragino Mincho ProN", serif';ctx.fillText(title,512,108);
     ctx.fillStyle='#c4d3c8';ctx.font='23px sans-serif';ctx.fillText('NAGATA KOSHI  /  PHOTOGRAPHY EXHIBITION',512,178);
-  });
+  }
+  const entrySign=canvasTexture(1024,256,ctx=>drawEntrySign(ctx,exhibition.title));
   const entrySignMat=new THREE.MeshBasicMaterial({map:entrySign,toneMapped:false});disposables.push(entrySignMat);
   plane(1.48,.37,entrySignMat,0,2.7,entryZ+.101);
   const entryLight=new THREE.PointLight('#edf2d8',4,5,2);entryLight.position.set(0,2.75,entryZ+.65);scene.add(entryLight);
@@ -293,12 +321,14 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   async function replaceWorks(nextWorks, collectionLabel='AFTER HOURS'){
     const prepared=await prepareWorks(nextWorks,collectionLabel);prepared.commit();
   }
-  async function transitionExhibition(nextWorks,collectionLabel,nature,{animate=true}={}){
+  async function transitionExhibition(nextWorks,collectionLabel,nature,{animate=true,title}={}){
     if(exhibitionJourney)throw new Error('An exhibition transition is already in progress');
     const prepared=await prepareWorks(nextWorks,collectionLabel);
     if(lost){prepared.discard();throw new Error('3D rendering is unavailable');}
     const commit=()=>{
       prepared.commit();natureActive=nature;if(!nature)botanical.stop();
+      natureRoom.setActive(nature&&entered);
+      if(title){drawEntrySign(entrySign.image.getContext('2d'),title);entrySign.needsUpdate=true;}
       const destination=nature?'night':'nature';
       panelFace.userData.destination=destination;panelMaterial.map=panelTextures[destination];
     };
@@ -327,21 +357,22 @@ export async function createGalleryScene(container, works, callbacks = {}) {
     return [0,entrance.eyeHeight,Math.min(9.2,l/2+distance)];
   }
   function home(){
-    cancelExhibition();botanical.stop();
+    if(questBusy())return;
+    cancelExhibition();botanical.stop();natureRoom.setActive(false);doorShadow.reset();
     entryJourney=null;journey=null;arcadeJourney=null;tween=null;lastFrame=null;entered=false;selected=-1;drag=null;area='gallery';claw.close();cafe.reset();notifyCafe();notifyArcade();
     leftDoor.rotation.y=rightDoor.rotation.y=0;camera.fov=container.getBoundingClientRect().width<700?59:55;camera.updateProjectionMatrix();canvas.style.cursor=ready?'pointer':'wait';
     canvas.setAttribute('aria-label','入口のガラス扉。クリック、またはEnterキーで写真展に入る。');
     const position=exteriorPosition();moveTo(position,[0,1.52,position[2]-3.6],true);
   }
   function enter(){
-    if(!ready||entered||entryJourney)return;
+    if(!ready||entered||entryJourney||questBusy())return;
     selected=-1;tween=null;drag=null;lastFrame=null;canvas.style.cursor='default';
     canvas.setAttribute('aria-label','扉を開けて展示室の中央へ移動中。');
     entryJourney={elapsed:0,path:createEntryPath(l,camera.position.z)};requestFrame();
   }
-  function overview(immediate=false){if(entryJourney||journey||arcadeJourney||claw.inGame||cafe.state==='pouring')return;if(area==='cafe'){leaveCafe();return;}if(area==='arcade'){leaveArcade();return;}selected=-1;moveTo([0,entrance.eyeHeight,0],[0,1.52,-3.6],immediate);}
+  function overview(immediate=false){if(entryJourney||journey||arcadeJourney||claw.inGame||questBusy()||cafe.state==='pouring')return;if(area==='cafe'){leaveCafe();return;}if(area==='arcade'){leaveArcade();return;}selected=-1;moveTo([0,entrance.eyeHeight,0],[0,1.52,-3.6],immediate);}
   function focus(index,immediate=false){
-    if(entryJourney||journey||arcadeJourney||claw.inGame||cafe.state==='pouring')return;
+    if(entryJourney||journey||arcadeJourney||claw.inGame||questBusy()||cafe.state==='pouring')return;
     if(area==='arcade'){leaveArcade(()=>focus(index,immediate));return;}
     if(area==='cafe'){leaveCafe(()=>focus(index,immediate));return;}
     selected=index;const p=placement(index),sign=p.side==='left'?-1:1;
@@ -358,33 +389,34 @@ export async function createGalleryScene(container, works, callbacks = {}) {
     notifyCafe();requestFrame();
   }
   function visitCafe(){
-    if(!entered||entryJourney||journey||arcadeJourney||area!=='gallery')return;
+    if(!entered||entryJourney||journey||arcadeJourney||questBusy()||area!=='gallery')return;
     selected=-1;area='cafe';callbacks.onCafeVisit?.();
     travel(cafePath(camera.position),cafePose.target);
   }
   function leaveCafe(done){
-    if(area!=='cafe'||journey||cafe.state==='pouring')return;
+    if(area!=='cafe'||journey||questBusy()||cafe.state==='pouring')return;
     travel(cafePath(camera.position,true),[0,1.52,-3.6],()=>{area='gallery';selected=-1;notifyCafe();done?.();});
   }
-  function faceCafeDoor(){if(area!=='cafe'||journey||cafe.state==='pouring')return;moveTo(camera.position.toArray(),[0,1.4,-l/2]);}
-  function pourCoffee(){if(area==='cafe'&&!journey&&cafe.pour())requestFrame();}
+  function faceCafeDoor(){if(area!=='cafe'||journey||questBusy()||cafe.state==='pouring')return;moveTo(camera.position.toArray(),[0,1.4,-l/2]);}
+  function pourCoffee(){if(area==='cafe'&&!journey&&!questBusy()&&cafe.pour())requestFrame();}
   function sipCoffee(){if(!journey&&cafe.sip())requestFrame();}
-  function notifyArcade(){callbacks.onArcadeState?.({area,busy:!!arcadeJourney});}
+  function notifyArcade(){callbacks.onArcadeState?.({area,busy:!!arcadeJourney||!!exitJourney});}
   function travelArcade(direction,done){
     selected=-1;tween=null;drag=null;lastFrame=null;claw.stopMove();
+    if(direction==='out')doorShadow.beginFade();
     arcadeJourney={direction,path:createArcadePath(l,camera.position,direction),elapsed:0,fovFrom:camera.fov,done};
     callbacks.onArcadeVisit?.();notifyArcade();requestFrame();
   }
   function visitArcade(){
-    if(!entered||entryJourney||journey||arcadeJourney||exhibitionJourney||area!=='gallery')return;
+    if(!entered||entryJourney||journey||arcadeJourney||questBusy()||exhibitionJourney||area!=='gallery')return;
     travelArcade('out');
   }
   function leaveArcade(done){
-    if(area!=='arcade'||arcadeJourney||claw.inGame)return;
+    if(area!=='arcade'||arcadeJourney||questBusy()||claw.inGame)return;
     travelArcade('in',done);
   }
   function startClaw(){
-    if(area!=='arcade'||arcadeJourney||!claw.start())return;
+    if(area!=='arcade'||arcadeJourney||questBusy()||!claw.start())return;
     // A slight view from above keeps both front/back motion and the chute legible.
     moveTo([-.65,1.85,7.12],[-3.5,1.45,6.5]);
     requestFrame();
@@ -392,8 +424,29 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   function closeClaw(){claw.close();if(area==='arcade')moveTo([-.65,1.62,6.5],[-3.5,1.45,6.5]);requestFrame();}
   function moveClaw(axis,direction){if(claw.move(axis,direction))requestFrame();}
   function nudgeClaw(axis,direction){if(claw.move(axis,direction)){claw.tick(100);claw.stopMove();requestFrame();}}
-  function stopClaw(){claw.stopMove();}
+  function stopClaw(){claw.stopMove();requestFrame();}
   function grabClaw(){if(claw.grab())requestFrame();}
+  function collectPrize(){
+    if(area!=='arcade'||arcadeJourney||questBusy()||quest.state.phase!=='empty'||!claw.takePrize())return;
+    quest.collectPin();moveTo([-.65,1.62,6.5],[-3.5,1.45,6.5]);callbacks.onNotice?.('ピンを手に入れた！');requestFrame();
+  }
+  function exchangePin(){
+    if(area!=='cafe'||journey||questBusy()||cafe.state==='pouring')return;
+    if(quest.state.phase==='key-ready'){
+      quest.collectKey();callbacks.onNotice?.('鍵を手に入れた！');
+    }else if(!quest.insertPin())callbacks.onNotice?.(quest.state.item==='key'?'鍵は持っています。':'ピンを入れる場所みたい。');
+    requestFrame();
+  }
+  function exitArcade(){
+    if(area!=='arcade'||arcadeJourney||claw.inGame||questBusy())return;
+    const target=[arcadeExit.x,1.52,arcadeExit.z+.8];
+    if(quest.state.item!=='key'){
+      moveTo(camera.position.toArray(),[arcadeExit.x,1.3,arcadeExit.z]);callbacks.onNotice?.('出口には鍵が必要です。');return;
+    }
+    tween=null;drag=null;quest.beginExit();
+    exitJourney={elapsed:0,from:camera.position.clone(),qFrom:camera.quaternion.clone(),qTo:cameraQuaternion(new THREE.Vector3(arcadeExit.x,entrance.eyeHeight,arcadeExit.z-.8),new THREE.Vector3(...target))};
+    notifyArcade();requestFrame();
+  }
   function updateCafeHints(){
     if(!callbacks.onCafeHints)return;
     const rect=container.getBoundingClientRect();
@@ -402,10 +455,13 @@ export async function createGalleryScene(container, works, callbacks = {}) {
     exit.visible=exit.visible&&entered&&!journey&&area==='cafe'&&cafe.state!=='pouring';
     machine.visible=machine.visible&&entered&&!journey&&area==='cafe'&&cafe.state==='empty';
     callbacks.onCafeHints({exit,machine,cup:cafe.bounds});
+    const exchange=project(quest.hint);
+    exchange.visible=exchange.visible&&entered&&area==='cafe'&&!journey&&['pin','key-ready'].includes(quest.state.phase);
+    callbacks.onQuestHint?.(exchange);
   }
   const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
   let drag=null;
-  canvas.addEventListener('pointerdown',event=>{if(!ready||entryJourney||journey||arcadeJourney||claw.inGame||exhibitionJourney||cafe.state==='pouring'||event.button!==0)return;canvas.setPointerCapture(event.pointerId);drag={id:event.pointerId,x:event.clientX,y:event.clientY,lastX:event.clientX,lastY:event.clientY,moved:false};});
+  canvas.addEventListener('pointerdown',event=>{if(!ready||entryJourney||journey||arcadeJourney||questBusy()||(claw.inGame&&claw.state!=='won')||exhibitionJourney||cafe.state==='pouring'||event.button!==0)return;canvas.setPointerCapture(event.pointerId);drag={id:event.pointerId,x:event.clientX,y:event.clientY,lastX:event.clientX,lastY:event.clientY,moved:false};});
   canvas.addEventListener('pointermove',event=>{
     if(!drag||drag.id!==event.pointerId)return;
     if(Math.hypot(event.clientX-drag.x,event.clientY-drag.y)>5)drag.moved=true;
@@ -419,11 +475,11 @@ export async function createGalleryScene(container, works, callbacks = {}) {
       if(!entered){
         if(raycaster.intersectObjects(entranceTargets,false).length)callbacks.onEnterRequest?.();
       }else{
-        const targets=area==='cafe'?[cafe.machineTarget,cafe.exitPortal]:area==='arcade'?[claw.hitTarget,...entranceTargets]:[...hitTargets,cafe.portal,panelFace,...entranceTargets];
+        const targets=area==='cafe'?[cafe.machineTarget,cafe.exitPortal,quest.target]:area==='arcade'?[...(claw.prizeAvailable?[claw.prizeTarget]:claw.state==='won'?[]:[claw.hitTarget]),arcadeHall.exitTarget,...entranceTargets]:[...hitTargets,cafe.portal,panelFace,...entranceTargets];
         const hits=raycaster.intersectObjects(targets,false);
         if(hits.length){const blockers=raycaster.intersectObjects(occluders,false);if(!blockers.length||blockers[0].distance>=hits[0].distance-.001){
           const data=hits[0].object.userData;
-          if(data.action==='entrance'){if(area==='arcade')leaveArcade();else visitArcade();}else if(data.action==='claw')startClaw();else if(data.action==='cafe')visitCafe();else if(data.action==='exit-cafe')leaveCafe();else if(data.action==='coffee')pourCoffee();else if(data.action==='exhibition-switch')callbacks.onExhibitionSwitch?.();else callbacks.onSelect?.(data.index);
+          if(data.action==='take-prize')collectPrize();else if(data.action==='exchange-pin')exchangePin();else if(data.action==='exit-arcade')exitArcade();else if(data.action==='entrance'){if(area==='arcade')leaveArcade();else visitArcade();}else if(data.action==='claw')startClaw();else if(data.action==='cafe')visitCafe();else if(data.action==='exit-cafe')leaveCafe();else if(data.action==='coffee')pourCoffee();else if(data.action==='exhibition-switch')callbacks.onExhibitionSwitch?.();else callbacks.onSelect?.(data.index);
         }}
       }
     }
@@ -441,8 +497,8 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   resize();
   await Promise.all(loadTasks);
   ready=true;canvas.style.cursor='pointer';requestFrame();
-  return {focus,overview,enter,home,visitCafe,leaveCafe,faceCafeDoor,pourCoffee,sipCoffee,replaceWorks,transitionExhibition,visitArcade,leaveArcade,startClaw,closeClaw,moveClaw,nudgeClaw,stopClaw,grabClaw,
-    setSuspended(value){suspended=value;lastFrame=null;if(value)claw.stopMove();else requestFrame();},
-    dispose(){cancelExhibition();claw.dispose();arcadeHall.dispose();botanical.dispose();motionPreference.removeEventListener?.('change',onMotionChange);observer.disconnect();cancelAnimationFrame(raf);disposables.forEach(x=>x.dispose());renderer.dispose();canvas.remove();},
+  return {focus,overview,enter,home,visitCafe,leaveCafe,faceCafeDoor,pourCoffee,sipCoffee,replaceWorks,transitionExhibition,visitArcade,leaveArcade,startClaw,closeClaw,moveClaw,nudgeClaw,stopClaw,grabClaw,collectPrize,exchangePin,exitArcade,
+    setSuspended(value){suspended=value;lastFrame=null;if(value)claw.stopMove(true);else requestFrame();},
+    dispose(){cancelExhibition();doorShadow.dispose();claw.dispose();arcadeHall.dispose();quest.dispose();botanical.dispose();natureRoom.dispose();motionPreference.removeEventListener?.('change',onMotionChange);observer.disconnect();cancelAnimationFrame(raf);disposables.forEach(x=>x.dispose());renderer.dispose();canvas.remove();},
   };
 }

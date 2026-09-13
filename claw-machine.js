@@ -85,15 +85,24 @@ export function createClawMachine({ scene, onState = () => {}, onWin = () => {} 
   // Raised red control deck and physical illuminated controls, visible before starting the game.
   const consoleGroup = new THREE.Group(); consoleGroup.position.set(.17, .86, .63); consoleGroup.rotation.x = .10; group.add(consoleGroup);
   box(.78, .11, .30, red, 0, 0, 0, consoleGroup);
-  for (const [x, color, symbol] of [[-.24, trim, '↔'], [0, trim, '↕'], [.24, pink, '↓']]) {
-    cylinder(.071, .071, .025, dark, x, .064, 0, consoleGroup);
-    cylinder(.057, .061, .020, color, x, .082, 0, consoleGroup);
-    const icon = label(.082, .082, x, .093, 0, (ctx, w, h) => {
-      ctx.fillStyle = '#fff7ee'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `600 ${h * .82}px sans-serif`; ctx.fillText(symbol, w / 2, h / 2);
-    }, consoleGroup, 256);
-    if (icon) { icon.rotation.x = -Math.PI / 2; icon.name = `physical-control-${symbol}`; }
-  }
+  // One sprung joystick handles both horizontal axes; the right button drops the claw.
+  const joystickX = -.16;
+  cylinder(.096, .10, .016, chrome, joystickX, .065, 0, consoleGroup, 'claw-joystick-mount');
+  const bootProfile = [[.081, 0], [.083, .01], [.064, .026], [.073, .032], [.055, .045],
+    [.062, .052], [.043, .065], [.049, .073], [.029, .088], [0, .088]];
+  mesh(new THREE.LatheGeometry(bootProfile.map(([r, y]) => new THREE.Vector2(r, y)), 24), dark,
+    [joystickX, .071, 0], consoleGroup, 'claw-joystick-boot');
+  const joystick = new THREE.Group(); joystick.name = 'claw-joystick';
+  joystick.position.set(joystickX, .125, 0); consoleGroup.add(joystick);
+  cylinder(.018, .018, .18, clawSteel, 0, .070, 0, joystick, 'claw-joystick-shaft');
+  mesh(new THREE.SphereGeometry(.061, 24, 16), pink, [0, .188, 0], joystick, 'claw-joystick-grip');
+  cylinder(.071, .071, .025, dark, .24, .064, 0, consoleGroup);
+  cylinder(.057, .061, .020, pink, .24, .082, 0, consoleGroup, 'claw-grab-button');
+  const grabIcon = label(.082, .082, .24, .093, 0, (ctx, w, h) => {
+    ctx.fillStyle = '#fff7ee'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `600 ${h * .82}px sans-serif`; ctx.fillText('↓', w / 2, h / 2);
+  }, consoleGroup, 256);
+  if (grabIcon) { grabIcon.rotation.x = -Math.PI / 2; grabIcon.name = 'physical-control-↓'; }
   // The suspended XY trolley travels on the two parallel rails.
   for (const x of [-.45, .45]) rod([x, 2.30, -.44], [x, 2.30, .43], .014, chrome);
   const trolley = new THREE.Group(); trolley.name = 'claw-trolley'; group.add(trolley);
@@ -122,6 +131,9 @@ export function createClawMachine({ scene, onState = () => {}, onWin = () => {} 
   const hitMaterial = own(new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
   const hitTarget = box(1.24, 2.64, 1.22, hitMaterial, 0, 1.34, .055, group, 'claw-machine-hit-target');
   hitTarget.userData.action = 'claw'; hitTarget.castShadow = false;
+  const prizeTarget = box(.34, .49, .015, hitMaterial, -.28, .49, .58, group, 'claw-prize-target');
+  prizeTarget.userData.action = 'take-prize';
+  let prizeCollected = false;
 
   const initialClaw = { x: -.26, z: .24 }, initialPin = { x: .16, y: .992, z: -.08 };
   const axes = { x: 0, z: 0 }, bounds = { x: [-.375, .375], z: [-.27, .33] };
@@ -130,6 +142,28 @@ export function createClawMachine({ scene, onState = () => {}, onWin = () => {} 
   let returnFrom = new THREE.Vector3(), releaseY = 0;
   const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
   const smooth = n => n * n * (3 - 2 * n);
+  const joystickUp = new THREE.Vector3(0, 1, 0), joystickDirection = new THREE.Vector3();
+  const joystickFrom = new THREE.Quaternion(), joystickTarget = new THREE.Quaternion(), nextJoystickTarget = new THREE.Quaternion();
+  let joystickElapsed = 0, joystickDuration = 0, joystickAnimating = false;
+  function targetJoystick(immediate = false) {
+    const magnitude = Math.hypot(axes.x, axes.z), angle = Math.PI / 10;
+    if (magnitude) {
+      joystickDirection.set(axes.x / magnitude * Math.sin(angle), Math.cos(angle), axes.z / magnitude * Math.sin(angle));
+      nextJoystickTarget.setFromUnitVectors(joystickUp, joystickDirection);
+    } else nextJoystickTarget.identity();
+    if (immediate) {
+      joystick.quaternion.copy(nextJoystickTarget); joystickTarget.copy(nextJoystickTarget); joystickAnimating = false; return;
+    }
+    if (Math.abs(nextJoystickTarget.dot(joystickTarget)) > 1 - 1e-9) return;
+    joystickFrom.copy(joystick.quaternion); joystickTarget.copy(nextJoystickTarget);
+    joystickElapsed = 0; joystickDuration = magnitude ? 100 : 160; joystickAnimating = true;
+  }
+  function tickJoystick(delta) {
+    if (!joystickAnimating) return;
+    joystickElapsed = Math.min(joystickDuration, joystickElapsed + delta);
+    joystick.quaternion.slerpQuaternions(joystickFrom, joystickTarget, smooth(joystickElapsed / joystickDuration));
+    if (joystickElapsed >= joystickDuration) { joystick.quaternion.copy(joystickTarget); joystickAnimating = false; }
+  }
   const stateInfo = () => ({ phase, inGame, canMove: inGame && phase === 'aiming', canGrab: inGame && phase === 'aiming' });
   function notify() { onState(stateInfo()); }
   function setPhase(next) { phase = next; elapsed = 0; notify(); }
@@ -152,11 +186,12 @@ export function createClawMachine({ scene, onState = () => {}, onWin = () => {} 
       pin.position.set(trolley.position.x, initialPin.y + head.position.y - low, trolley.position.z);
     }
   }
-  function stopMove() { axes.x = 0; axes.z = 0; }
+  // Pass true only when rendering is about to be suspended: no animation can be left pending.
+  function stopMove(immediate = false) { axes.x = 0; axes.z = 0; targetJoystick(immediate); }
   function home() {
     trolley.position.set(initialClaw.x, 0, initialClaw.z); head.position.y = high;
     pin.position.set(initialPin.x, initialPin.y, initialPin.z); pin.rotation.set(0, 0, 0); pin.visible = true;
-    caught = false; closed = 0; pose();
+    caught = false; closed = 0; targetJoystick(true); pose();
   }
   function start() {
     if (disposed || phase === 'won' || inGame || (phase !== 'idle' && phase !== 'aiming')) return false;
@@ -165,7 +200,7 @@ export function createClawMachine({ scene, onState = () => {}, onWin = () => {} 
   function move(axis, direction) {
     if (axis !== 'x' && axis !== 'z') return false;
     if (!inGame || phase !== 'aiming' || disposed) return false;
-    axes[axis] = Math.sign(Number(direction) || 0); return true;
+    axes[axis] = Math.sign(Number(direction) || 0); targetJoystick(); return true;
   }
   function grab() {
     if (!inGame || phase !== 'aiming' || disposed) return false;
@@ -176,7 +211,7 @@ export function createClawMachine({ scene, onState = () => {}, onWin = () => {} 
     let dt = Number.isFinite(deltaMs) ? Math.max(0, deltaMs) : 0;
     // Substeps make fast tests, low frame rates, and all phase boundaries deterministic.
     while (dt > 0) {
-      const delta = Math.min(20, dt); dt -= delta;
+      const delta = Math.min(20, dt); dt -= delta; tickJoystick(delta);
       if (phase === 'aiming' && inGame) {
         for (const axis of ['x', 'z']) trolley.position[axis] = clamp(trolley.position[axis] + axes[axis] * speed * delta / 1000, ...bounds[axis]);
       } else if (phase === 'dropping') {
@@ -213,19 +248,24 @@ export function createClawMachine({ scene, onState = () => {}, onWin = () => {} 
       }
       pose();
     }
-    return ['dropping', 'lifting', 'returning', 'releasing'].includes(phase) || (phase === 'aiming' && inGame && !!(axes.x || axes.z));
+    return joystickAnimating || ['dropping', 'lifting', 'returning', 'releasing'].includes(phase) || (phase === 'aiming' && inGame && !!(axes.x || axes.z));
   }
   function close() {
-    if (disposed) return; stopMove(); inGame = false;
+    if (disposed) return; stopMove(true); inGame = false;
     // Closing never aborts a prize in flight and never permits replay after a win.
     if (phase === 'aiming') setPhase('idle'); else notify();
   }
   function reset() {
     if (disposed || phase === 'won' || ['dropping', 'lifting', 'returning', 'releasing'].includes(phase)) return false;
-    stopMove(); home(); setPhase(inGame ? 'aiming' : 'idle'); return true;
+    stopMove(true); home(); setPhase(inGame ? 'aiming' : 'idle'); return true;
   }
-  function dispose() { if (disposed) return; disposed = true; stopMove(); group.removeFromParent(); for (const resource of resources) resource.dispose(); resources.clear(); }
+  function takePrize() {
+    if (disposed || phase !== 'won' || prizeCollected) return false;
+    prizeCollected = true; pin.visible = false; close(); return true;
+  }
+  function dispose() { if (disposed) return; disposed = true; stopMove(true); group.removeFromParent(); for (const resource of resources) resource.dispose(); resources.clear(); }
   home();
-  return { group, hitTarget, start, move, grab, tick, stopMove, close, reset, dispose,
+  return { group, hitTarget, prizeTarget, takePrize, start, move, grab, tick, stopMove, close, reset, dispose,
+    get prizeAvailable() { return phase === 'won' && !prizeCollected && !disposed; },
     get state() { return phase; }, get inGame() { return inGame; } };
 }

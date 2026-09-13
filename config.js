@@ -1,5 +1,5 @@
 // Editable copy and provisional dimensions. One 3D scene unit = one metre.
-export const exhibition = { title: '鳥瞰図', englishTitle: 'AFTER HOURS' };
+export const exhibition = { title: '写真展：鳥瞰図', englishTitle: 'AFTER HOURS' };
 export const room = { width:4.6, length:9.4, height:2.95, columnDepth:.24, columnWidth:.32,
   columns:[2.45,.05,-2.75], slots:[3.4,1.75,.85,-.95,-1.85,-3.7], seats:[1.55,.9,-1.4,-2.05], hangingHeight:1.5 };
 export const files=['P1000523.JPG','P1011571.jpg','P1011578.jpg','IMG_8814.JPG','P1011576.jpg','P1011437.jpg','P1011820.jpg','P1011815.JPG','P1011828.JPG','P1011541.JPEG','P1011579.JPEG','P1011801.JPG'];

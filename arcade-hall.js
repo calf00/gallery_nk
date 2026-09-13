@@ -11,6 +11,7 @@ export const arcadeHall = Object.freeze({
   viewTarget: Object.freeze([-3.5, 1.45, 6.5]),
   openMs: 700, closeMs: 700,
 });
+export const arcadeExit = Object.freeze({x:3.05,z:9.8,width:1.02,height:2.3});
 
 // Rounded polyline corners stay in the convex hull of the waypoints: unlike
 // an interpolating spline they cannot bow through the doorway or a seat.
@@ -120,13 +121,43 @@ export function createArcadeHall({ scene }) {
   const { width, height, nearZ, farZ } = arcadeHall;
   const length = farZ - nearZ, centreZ = (farZ + nearZ) / 2;
   box('hall-floor', [width, .12, length + .1], [0, -.0645, centreZ], floor);
-  box('hall-far-wall', [width + .16, height, .16], [0, height / 2, farZ + .08], wall);
+  // An actual opening at the opposite corner from the cabinet.
+  const {x:exitX,width:exitWidth,height:exitHeight}=arcadeExit;
+  const leftEdge=exitX-exitWidth/2,rightEdge=exitX+exitWidth/2;
+  box('hall-far-wall', [leftEdge+width/2,height,.16], [(leftEdge-width/2)/2,height/2,farZ+.08], wall);
+  box('hall-exit-right-wall', [width/2-rightEdge,height,.16], [(rightEdge+width/2)/2,height/2,farZ+.08], wall);
+  box('hall-exit-lintel', [exitWidth,height-exitHeight,.16], [exitX,(height+exitHeight)/2,farZ+.08], wall);
   box('hall-ceiling', [width + .16, .12, length], [0, height + .06, centreZ], ceiling);
   for (const side of [-1, 1]) {
     box(`hall-side-wall-${side}`, [.16, height, length + .16], [side * (width / 2 + .08), height / 2, centreZ], wall);
     box(`hall-side-trim-${side}`, [.025, .115, length], [side * (width / 2 - .0125), .0575, centreZ], trim);
   }
-  box('hall-far-trim', [width, .115, .025], [0, .0575, farZ - .0125], trim);
+  box('hall-far-trim', [leftEdge+width/2,.115,.025], [(leftEdge-width/2)/2,.0575,farZ-.0125], trim);
+  box('hall-exit-right-trim', [width/2-rightEdge,.115,.025], [(rightEdge+width/2)/2,.0575,farZ-.0125], trim);
+  for(const x of [leftEdge-.025,rightEdge+.025])box('exit-door-frame',[.05,exitHeight+.05,.20],[x,exitHeight/2,farZ],trim);
+  box('exit-door-header',[exitWidth+.1,.05,.20],[exitX,exitHeight+.025,farZ],trim);
+  const exitDoor=new THREE.Group();exitDoor.name='arcade-exit-door';exitDoor.position.set(leftEdge,0,farZ);group.add(exitDoor);
+  const doorSurface=material('#273e39'),brass=material('#d4b96f',{metalness:.65,roughness:.3});
+  function doorBox(name,size,position,surface){const m=box(name,size,[0,0,0],surface);exitDoor.add(m);m.position.set(...position);return m;}
+  doorBox('exit-door-leaf',[exitWidth-.025,exitHeight-.025,.055],[exitWidth/2,exitHeight/2,0],doorSurface);
+  doorBox('exit-door-handle',[.025,.18,.065],[exitWidth-.14,1.08,-.057],brass);
+  doorBox('exit-door-lock',[.045,.065,.018],[exitWidth-.14,.91,-.038],brass);
+  const invisible=new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false});resources.add(invisible);
+  const exitTarget=box('arcade-exit-target',[exitWidth,exitHeight,.012],[exitX,exitHeight/2,farZ-.10],invisible,false);
+  exitTarget.userData.action='exit-arcade';
+  box('exit-sign',[.65,.20,.035],[exitX,2.55,farZ-.065],doorSurface,false);
+  if(typeof document!=='undefined'){
+    const canvas=document.createElement('canvas');canvas.width=512;canvas.height=128;
+    const ctx=canvas.getContext('2d');ctx.fillStyle='#273e39';ctx.fillRect(0,0,512,128);ctx.fillStyle='#eef2de';ctx.textAlign='center';ctx.font='58px sans-serif';ctx.fillText('EXIT',256,86);
+    const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;resources.add(texture);
+    const mat=new THREE.MeshBasicMaterial({map:texture,toneMapped:false});resources.add(mat);
+    const geo=new THREE.PlaneGeometry(.63,.158);resources.add(geo);const sign=new THREE.Mesh(geo,mat);sign.rotation.y=Math.PI;sign.position.set(exitX,2.55,farZ-.085);group.add(sign);
+  }
+  // A lit landing lets the camera pass completely through the doorway.
+  box('exit-landing',[1.9,.12,2.5],[exitX,-.0645,farZ+1.25],floor);
+  for(const x of [exitX-.97,exitX+.97])box('exit-landing-wall',[.12,height,2.5],[x,height/2,farZ+1.25],wall);
+  box('exit-landing-end',[2.06,height,.12],[exitX,height/2,farZ+2.5],wall);
+  const exitLight=new THREE.PointLight('#fff4d6',6,5,2);exitLight.position.set(exitX,2.6,farZ+1.3);group.add(exitLight);
   // Long, quiet stone joints run down the corridor without forming trip edges.
   for (let x = -3.3; x <= 3.3; x += 1.1) {
     box('hall-floor-joint', [.007, .001, length], [x, -.0039, centreZ], seam, false);
@@ -137,7 +168,7 @@ export function createArcadeHall({ scene }) {
     const light = new THREE.PointLight('#fff2da', 4.8, 8, 2);
     light.position.set(0, height - .25, z); group.add(light);
   }
-  return { group, occluders, dispose() {
+  return { group, occluders, exitTarget, setExitOpen(progress){exitDoor.rotation.y=-Math.PI/2*clamp(progress);}, dispose() {
     group.removeFromParent();
     for (const resource of resources) resource.dispose();
     resources.clear(); occluders.length = 0;

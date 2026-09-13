@@ -142,3 +142,16 @@
 .claw-result{position:absolute;top:43%;left:50%;transform:translate(-50%,-50%);font-size:clamp(40px,8vw,72px);font-weight:800;letter-spacing:.08em;color:#fff4e7;text-shadow:0 3px 0 #932c67,0 0 35px #ff60aab3;padding:28px 38px;border:1px solid #ffd6e844;border-radius:20px;background:#261b2bbf;backdrop-filter:blur(14px);white-space:nowrap}
 @media(max-width:380px){.claw-console{column-gap:18px;padding:12px 15px 8px}.arcade-back{left:16px}.claw-close{right:16px}}
 @media(max-height:600px) and (min-width:601px){.claw-console{left:auto;right:18px;transform:none;bottom:16px;column-gap:18px}.claw-close{top:15px;right:18px}}
+
+/* Carried quest items stay separate from the coffee cup and photo controls. */
+.arcade-exit{position:absolute;right:22px;top:87px;padding:10px 16px}
+.held-item{position:absolute;left:22px;bottom:150px;z-index:4;width:76px;padding:9px 8px 7px;border:1px solid #dce4cc38;border-radius:15px;background:#182524b3;backdrop-filter:blur(8px);display:flex;align-items:center;flex-direction:column;gap:5px;font-size:12px;color:#eef0e4}
+.held-item svg{width:52px;height:102px;stroke:none;filter:drop-shadow(0 4px 5px #0005)}
+.in-arcade .held-item,.in-cafe .held-item{bottom:calc(24px + env(safe-area-inset-bottom))}
+.welcome .held-item,.playing-claw .held-item,.quest-busy .held-item{display:none!important}
+.exchange-action{font-size:12px!important;padding:10px 14px!important;z-index:4}
+.quest-busy .tour-ui,.quest-busy .arcade-controls,.quest-busy .site-header{pointer-events:none;opacity:.35}
+.escape-ending{position:absolute;inset:0;z-index:20;background:#e5e8dce8;color:#243a33;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;text-align:center;padding:24px}
+.escape-ending p{font:18px Georgia,serif;letter-spacing:.3em}.escape-ending h2{font-size:clamp(18px,4vw,28px);font-weight:400;letter-spacing:.07em}
+.escaped .site-header,.escaped .tour-ui,.escaped .arcade-controls,.escaped .held-item,.escaped .notice{display:none!important}
+@media(max-width:380px){.held-item{left:16px;width:62px}.held-item svg{width:43px;height:86px}.arcade-exit{right:16px}}

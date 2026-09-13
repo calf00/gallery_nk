@@ -127,7 +127,8 @@ export function createBotanicalScene({ THREE, scene, room, reducedMotion = false
     return mesh;
   }
   const trunkCurve = new THREE.CatmullRomCurve3(trunkPoints, false, 'centripetal');
-  const trunkRadii = [.40, .285, .25, .225, .21, .195, .18, .15, .10];
+  // Add roughly 15% through the trunk, blending into the established root flare.
+  const trunkRadii = [.40, .328, .288, .259, .242, .224, .207, .173, .115];
   growingSurface('tapered-tree-trunk', 48, 28, .368, (t, angle) => {
     const p = trunkCurve.getPoint(t), segment = t * (trunkRadii.length - 1);
     const i = Math.min(trunkRadii.length - 2, Math.floor(segment));

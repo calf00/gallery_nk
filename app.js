@@ -1,5 +1,5 @@
-import { room, placement } from './config.js?v=20260911-entry';
-import { collections } from './collections.js?v=20260912-corner';
+import { room, placement } from './config.js?v=20260913-garden';
+import { collections } from './collections.js?v=20260913-garden';
 let collectionKey='night', activeCollection=collections.night, descriptions=activeCollection.descriptions, locations=activeCollection.locations, switching=false;
 const $=id=>document.getElementById(id);
 const gallery=$('gallery'), indexDialog=$('index-dialog'), viewer=$('viewer-dialog');
@@ -7,9 +7,10 @@ const pad=n=>String(n).padStart(2,'0');
 let works=[], scene=null, selected=-1, viewerIndex=0, entered=false, entering=false, sceneFailed=false;
 let noticeTimer,cafeArea='gallery',cafeBusy=false,coffeeState='empty';
 let arcadeArea='gallery',arcadeBusy=false,clawState={phase:'idle',inGame:false,canMove:false,canGrab:false};
+let questState={phase:'empty',item:null,busy:false,escaped:false};
 function announce(text){$('notice').textContent=text;$('notice').hidden=false;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>{$('notice').hidden=true;},4200);}
 function syncSuspend(){scene?.setSuspended(document.hidden||indexDialog.open||viewer.open);}
-function showIndex(){if(switching||arcadeBusy||clawState.inGame)return;if(!works.length){location.href='./photos.html';return;}indexDialog.showModal();syncSuspend();}
+function showIndex(){if(switching||arcadeBusy||clawState.inGame||questState.busy||questState.escaped)return;if(!works.length){location.href='./photos.html';return;}indexDialog.showModal();syncSuspend();}
 $('index-button').addEventListener('click',showIndex);
 for(const button of document.querySelectorAll('[data-close]'))button.addEventListener('click',()=>$(button.dataset.close).close());
 for(const dialog of [indexDialog,viewer]) {
@@ -32,6 +33,7 @@ function finishEntry(){
 }
 $('enter-button').addEventListener('click',enter);
 $('home-button').addEventListener('click',()=>{
+  if(questState.busy||questState.escaped)return;
   entered=false;entering=false;selected=-1;gallery.classList.remove('entered','entering');gallery.classList.add('welcome');
   $('tour-ui').hidden=true;$('entry-status').hidden=true;$('intro').inert=false;
   $('enter-button').disabled=!scene&&!sceneFailed;$('index-button').disabled=false;
@@ -51,7 +53,7 @@ function updateSelection(index){
 function selectWork(index,{open=false}={}){
   if(!Number.isInteger(index)||index<0||index>=works.length)return;
   if(!scene||sceneFailed){openViewer(index);return;}
-  if(cafeBusy||switching||arcadeBusy||clawState.inGame)return;
+  if(cafeBusy||switching||arcadeBusy||clawState.inGame||questState.busy||questState.escaped)return;
   if(arcadeArea==='arcade'){scene.leaveArcade(()=>selectWork(index,{open}));return;}
   if(cafeArea==='cafe'){scene.leaveCafe(()=>selectWork(index,{open}));return;}
   if(entering)return;
@@ -92,11 +94,24 @@ function applyClawInput(){
   }
 }
 function stopClawInput(){clawHeld.clear();clawKeys.clear();scene?.stopClaw();for(const button of document.querySelectorAll('[data-claw-axis]'))button.classList.remove('held');}
+function syncPrizeButton(){
+  $('arcade-start').hidden=clawState.phase==='won'&&questState.phase!=='empty';
+  $('arcade-start').textContent=clawState.phase==='won'?'ピンを取る':'タッチしてあそぶ';
+}
+function syncQuest(state){
+  questState=state;gallery.classList.toggle('quest-busy',state.busy);gallery.classList.toggle('escaped',state.escaped);
+  $('held-item').hidden=!state.item;$('held-pin').toggleAttribute('hidden',state.item!=='pin');$('held-key').toggleAttribute('hidden',state.item!=='key');
+  $('held-item-label').textContent=state.item==='key'?'鍵':'ピン';
+  $('held-item').setAttribute('aria-label',state.item==='key'?'持っている鍵':'持っているピン');
+  $('exchange-action').textContent=state.phase==='key-ready'?'鍵を取る':'ピンを入れる';
+  if(state.busy||state.escaped)$('exchange-action').hidden=true;
+  $('escape-ending').hidden=!state.escaped;syncPrizeButton();
+}
 function syncArcade({area,busy}){
   arcadeArea=area;arcadeBusy=busy;$('index-switch').disabled=area==='arcade'||busy;
   gallery.classList.toggle('in-arcade',area==='arcade');gallery.classList.toggle('arcade-travelling',busy);
   $('arcade-controls').hidden=area!=='arcade'||busy||clawState.inGame;
-  $('arcade-start').hidden=clawState.phase==='won';
+  syncPrizeButton();
   $('arcade-return').disabled=busy;$('index-button').disabled=busy||clawState.inGame||cafeBusy||entering;
   $('arcade-travel-status').hidden=!busy;
   $('scene').querySelector('canvas')?.setAttribute('aria-label',area==='arcade'?'UFOキャッチャー。タッチ、またはEnterキーでゲーム開始。':'3D展示室。ドラッグで見回す。入口の扉をタップすると廊下へ。');
@@ -112,12 +127,18 @@ function syncClaw(state){
   for(const button of document.querySelectorAll('[data-claw-axis]'))button.disabled=!state.canMove;
   $('claw-status').textContent=state.canMove?'押している間、移動':state.phase==='won'?'':'つかんでいます…';
   $('arcade-controls').hidden=arcadeArea!=='arcade'||arcadeBusy||state.inGame;
-  $('arcade-start').hidden=state.phase==='won';
+  syncPrizeButton();
   $('index-button').disabled=arcadeBusy||state.inGame||cafeBusy||entering;
 }
 $('hallway-button').addEventListener('click',()=>scene?.visitArcade());
 $('arcade-return').addEventListener('click',()=>scene?.leaveArcade());
-$('arcade-start').addEventListener('click',()=>scene?.startClaw());
+$('arcade-start').addEventListener('click',()=>clawState.phase==='won'?scene?.collectPrize():scene?.startClaw());
+$('arcade-exit').addEventListener('click',()=>scene?.exitArcade());
+$('exchange-action').addEventListener('click',()=>scene?.exchangePin());
+$('held-item').addEventListener('click',()=>{
+  if(questState.item==='pin'){if(cafeArea==='cafe')scene?.exchangePin();else announce('カフェの黒い箱に入れられそう。');}
+  else if(questState.item==='key'){if(arcadeArea==='arcade')scene?.exitArcade();else announce('UFOキャッチャーの部屋に出口があります。');}
+});
 $('claw-close').addEventListener('click',()=>{stopClawInput();scene?.closeClaw();});
 $('claw-grab').addEventListener('click',()=>{stopClawInput();scene?.grabClaw();});
 for(const button of document.querySelectorAll('[data-claw-axis]')){
@@ -185,7 +206,7 @@ async function init(){
     const response=await fetch('./assets/manifest.json');if(!response.ok)throw new Error('manifest');works=await response.json();if(works.length!==12)throw new Error('count');buildCollection();
     const slow=setTimeout(()=>{$('load-status').textContent='読み込み中です。右上の作品一覧からも鑑賞できます。';},10000);
     try{
-      const {createGalleryScene}=await import('./scene.js?v=20260912-arcade');
+      const {createGalleryScene}=await import('./scene.js?v=20260913-escape');
       scene=await createGalleryScene($('scene'),works,{
         onProgress(n,total){$('load-status').textContent=`展示室を準備中 ${n} / ${total}`;},
         onEnterRequest:enter,
@@ -197,6 +218,9 @@ async function init(){
         onArcadeVisit(){updateSelection(-1);},
         onArcadeState:syncArcade,
         onClawState:syncClaw,
+        onQuestState:syncQuest,
+        onNotice:announce,
+        onQuestHint(point){const button=$('exchange-action');button.hidden=!point.visible;button.style.left=`${point.x}px`;button.style.top=`${point.y}px`;},
         onCoffee:syncCoffee,
         onCafeHints({exit,machine,cup}){
           for(const [id,point] of [['cafe-exit',exit],['coffee-tap',machine]]){
@@ -226,7 +250,7 @@ async function transitionAnimation(frames,duration){
   await animation.finished;animation.commitStyles();animation.cancel();
 }
 async function switchCollection(){
-  if(switching||entering||cafeBusy||arcadeBusy||clawState.inGame||arcadeArea==='arcade')return;
+  if(switching||entering||cafeBusy||arcadeBusy||clawState.inGame||questState.busy||questState.escaped||arcadeArea==='arcade')return;
   switching=true;const nextKey=collectionKey==='night'?'nature':'night',next=collections[nextKey];
   const botanicalTransition=nextKey==='nature'&&entered&&scene&&!sceneFailed;
   const mode=botanicalTransition?'petals':'dark';
@@ -241,10 +265,13 @@ async function switchCollection(){
     ]);
     if(!response.ok)throw new Error('manifest');
     const nextWorks=await response.json();if(nextWorks.length!==12)throw new Error('count');
-    if(scene&&!sceneFailed)await scene.transitionExhibition(nextWorks,next.english,nextKey==='nature',{animate:entered});
+    if(scene&&!sceneFailed)await scene.transitionExhibition(nextWorks,next.english,nextKey==='nature',{animate:entered,title:next.title});
     works=nextWorks;collectionKey=nextKey;activeCollection=next;descriptions=next.descriptions;locations=next.locations;
     buildCollection();updateSelection(-1);
-    $('index-title').textContent=nextKey==='nature'?'自然の12枚':'12の夜景';
+    $('index-title').textContent=next.title;
+    document.title=next.title+' — Online Gallery';
+    document.querySelector('.brand-name span').textContent=next.title;
+    document.querySelector('.japanese-title').textContent=next.title;
     document.querySelector('.index-description').textContent=next.intro;
     document.querySelector('.index-footer').firstChild.textContent=`NAGATA KOSHI — ${next.title}`;
     document.querySelector('.edition').textContent=next.english+' · 12 WORKS';
