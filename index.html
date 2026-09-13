@@ -5,16 +5,17 @@
   <title>写真展：鳥瞰図 — Online Gallery</title>
   <meta name="description" content="街が眠っても、光はつづく。12枚の夜景を巡るバーチャル写真展。">
   <meta name="theme-color" content="#101a1b">
-  <link rel="icon" href="./favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="./style.css?v=20260913-escape">
-  <script type="module" src="./app.js?v=20260913-ivy"></script>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="./style.css?v=20260913-info">
+  <script type="module" src="./app.js?v=20260913-info"></script>
 </head>
 <body>
+  <audio id="gallery-music" src="./assets/audio/midnight-gallery.mp3" loop preload="none" hidden></audio>
   <a class="skip-link" href="#index-button">作品一覧へ</a>
   <main id="gallery" class="gallery welcome">
     <div id="scene" class="scene" aria-label="ガラスの入口と、白い壁に12枚の夜景が並ぶ展示室"></div><div class="scene-shade" aria-hidden="true"></div>
     <header class="site-header">
       <button class="brand" id="home-button" aria-label="展示室の入口へ"><span class="brand-mark" aria-hidden="true">nk.</span><span class="brand-name">NAGATA KOSHI<span>写真展：鳥瞰図</span></span></button>
-      <div class="header-actions"><span class="edition">NIGHT PHOTOGRAPHY · 12 WORKS</span><button class="outline-button" id="index-button"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 3h5v5H3zM12 3h5v5h-5zM3 12h5v5H3zM12 12h5v5h-5z"/></svg>作品一覧<span class="button-count">12</span></button></div>
+      <div class="header-actions"><span class="edition">NIGHT PHOTOGRAPHY · 12 WORKS</span><button class="outline-button sound-toggle" id="sound-toggle" aria-label="音を消す" aria-pressed="true" title="音を消す" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4Z"/><path class="sound-waves" d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/><path class="sound-cross" d="m15 9 6 6m0-6-6 6"/></svg><span id="sound-label">音 ON</span></button><button class="outline-button" id="index-button"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 3h5v5H3zM12 3h5v5h-5zM3 12h5v5H3zM12 12h5v5h-5z"/></svg>作品一覧<span class="button-count">12</span></button></div>
     </header>
     <section class="intro" id="intro" aria-labelledby="exhibition-title">
       <p class="eyebrow"><span></span>A VIRTUAL PHOTO EXHIBITION</p><h1 id="exhibition-title">nagata<br><em>koshi</em></h1>
@@ -69,9 +70,19 @@
     <button id="exchange-action" class="cafe-hotspot exchange-action" hidden>ピンを入れる</button>
     <section id="escape-ending" class="escape-ending" hidden aria-labelledby="escape-title"><p>THANK YOU</p><h2 id="escape-title">ご来場ありがとうございました。</h2></section>
     <div id="notice" class="notice" role="status" hidden></div>
+    <button id="info-button" class="info-button" aria-label="この写真展について" aria-haspopup="dialog" aria-controls="info-dialog" title="この写真展について"><span aria-hidden="true">i</span></button>
     <noscript><div class="noscript">3D展示にはJavaScriptが必要です。<a href="./photos.html">12枚の写真を見る</a></div></noscript>
   </main>
   <div id="collection-transition" class="collection-transition" hidden role="status"><span id="transition-kicker">NEXT EXHIBITION</span><h2 id="transition-title">写真展：いきもの</h2><p>12 photographs · NAGATA KOSHI</p></div>
+  <dialog id="info-dialog" class="info-dialog" aria-labelledby="info-title">
+    <div class="info-header"><h2 id="info-title">この写真展について</h2><button class="close-button" data-close="info-dialog" aria-label="案内を閉じる" autofocus>×</button></div>
+    <div class="info-content">
+      <section><h3>写真・展示制作</h3><p>NAGATA KOSHI</p><p>掲載写真の著作権は撮影者に帰属します。</p></section>
+      <section><h3>音楽</h3><p>Midnight Gallery</p><p>制作：NAGATA KOSHI</p></section>
+      <section><h3>作品のご利用について</h3><p>法令で認められる場合を除き、写真・音楽の無断転載・再配布・販売はお控えください。</p></section>
+      <p class="info-share">この会場のURLのシェアは歓迎です。</p>
+    </div>
+  </dialog>
   <dialog id="index-dialog" class="index-dialog" aria-labelledby="index-title">
     <div class="dialog-header"><div><p class="eyebrow">THE COLLECTION</p><h2 id="index-title">写真展：鳥瞰図</h2></div><button class="close-button" data-close="index-dialog" aria-label="作品一覧を閉じる">×</button></div>
     <button id="index-switch" class="text-button collection-link">写真展：いきものへ ↗</button><p class="index-description">気になる一枚から、夜を巡る。</p><div id="works-grid" class="works-grid"></div><footer class="index-footer">NAGATA KOSHI — 写真展：鳥瞰図<span>01 — 12</span></footer>

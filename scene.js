@@ -3,8 +3,10 @@ import { exhibition, room, printSize, fittedImage, placement } from './config.js
 import { entrance, createEntryPath, sampleEntry } from './entry-path.js?v=20260912-arcade';
 import { createCafe, cafePath, cafePose, cafeDoor } from './cafe.js?v=20260913-escape';
 import { createBotanicalScene, botanicalTiming } from './botanical.js?v=20260913-garden';
-import { createNatureRoom } from './nature-room.js?v=20260913-ivy';
-import { createClawMachine } from './claw-machine.js?v=20260913-escape';
+import { createNatureRoom } from './nature-room.js?v=20260913-woodland';
+import { createNightGalleryFinish } from './night-gallery.js?v=20260913-refined';
+import { createGallerySound } from './sound-effects.js?v=20260913-walking';
+import { createClawMachine } from './claw-machine.js?v=20260913-audio';
 import { arcadeExit, createArcadeHall, createArcadePath, sampleArcadeJourney } from './arcade-hall.js?v=20260913-escape';
 import { createDoorShadow } from './door-shadow.js?v=20260913-arm';
 
@@ -15,6 +17,7 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#888d86');
   const camera = new THREE.PerspectiveCamera(55, 1, .025, 70);
+  const sound=createGallerySound(), soundPosition=new THREE.Vector3();
   const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'low-power' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, matchMedia('(max-width:700px)').matches ? 1.5 : 1.75));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -40,6 +43,7 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   function render(now) {
     raf = 0;
     if(suspended||lost){lastFrame=null;return;}
+    soundPosition.copy(camera.position);
     const delta=lastFrame===null?0:Math.min(64,now-lastFrame);lastFrame=now;
     if(entryJourney){
       entryJourney.elapsed+=delta;
@@ -103,6 +107,9 @@ export async function createGalleryScene(container, works, callbacks = {}) {
     const clawAnimating=claw.tick(delta);
     const questAnimating=quest.tick(delta);
     const shadowAnimating=doorShadow.tick(delta,{camera,eligible:entered&&area==='gallery'&&!entryJourney&&leftDoor.rotation.y===0&&rightDoor.rotation.y===0});
+    sound.tick(delta,{distance:Math.hypot(camera.position.x-soundPosition.x,camera.position.z-soundPosition.z),
+      surface:Math.abs(camera.position.z)<room.length/2?(natureActive?'grass':'carpet'):'hard',
+      coffee:cafe.state,claw:claw.state,inGame:claw.inGame,motor:claw.moving});
     renderer.render(scene,camera);if(area!=='arcade'&&!arcadeJourney)cafe.draw(renderer);updateCafeHints();
     if (tween||entryJourney||journey||arcadeJourney||exitJourney||exhibitionJourney||coffeeAnimating||petalsAnimating||clawAnimating||shadowAnimating||questAnimating) requestFrame();else lastFrame=null;
   }
@@ -273,7 +280,7 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   const glowMat=new THREE.MeshBasicMaterial({map:glowTex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,toneMapped:false});disposables.push(glowMat);
   const lampFace=new THREE.MeshBasicMaterial({color:'#fff6db',toneMapped:false});disposables.push(lampFace);
   const loader=new THREE.TextureLoader();
-  const artworkMeshes=[];
+  const artworkMeshes=[], gallerySpots=[];
   let loaded=0;
   const loadTasks=works.map(async(work,i)=>{
     const pos=placement(i),size=printSize(work.aspect),fit=fittedImage(work.aspect,size.width,size.height);
@@ -290,11 +297,13 @@ export async function createGalleryScene(container, works, callbacks = {}) {
     const glow=plane(1.4,2.3,glowMat,pos.x+(pos.side==='left'?.002:-.002),1.62,pos.z);glow.rotation.y=pos.rotation;
     const lamp=new THREE.Group();lamp.position.set(pos.side==='left'?-1.48:1.48,h-.39,pos.z);lamp.lookAt(new THREE.Vector3(pos.x,1.45,pos.z));scene.add(lamp);
     box(.12,.12,.2,metal,0,0,.025,lamp);plane(.087,.087,lampFace,0,0,.129,lamp);
-    const light=new THREE.SpotLight('#fff4db',6,4,.58,.85,2);light.position.copy(lamp.position);light.target.position.set(pos.x,1.45,pos.z);scene.add(light,light.target);
+    const light=new THREE.SpotLight('#fff4db',6,4,.58,.85,2);light.position.copy(lamp.position);light.target.position.set(pos.x,1.45,pos.z);scene.add(light,light.target);gallerySpots.push(light);
     // Start with tiny images. A high resolution image is loaded only on approach.
     try{const texture=await loader.loadAsync(`./assets/${work.thumb_filename}`);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());imageMat.map=texture;imageMat.color.set('#ffffff');imageMat.needsUpdate=true;disposables.push(texture);work.sceneMaterial=imageMat;}catch{callbacks.onTextureError?.(i);}
     loaded++;callbacks.onProgress?.(loaded,works.length);requestFrame();
   });
+  const nightFinish=createNightGalleryFinish({THREE,scene,room,artworks:artworkMeshes,spots:gallerySpots,glowMaterial:glowMat,
+    materials:{wall,trim,floorMat,ceilingMat,metal,black,paper,darkMetal}});
   // Load the complete next collection before changing any of the visible works.
   async function prepareWorks(nextWorks, collectionLabel='AFTER HOURS'){
     const results=await Promise.allSettled(nextWorks.map(work=>loader.loadAsync(`./assets/${work.thumb_filename}`)));
@@ -328,6 +337,7 @@ export async function createGalleryScene(container, works, callbacks = {}) {
     const commit=()=>{
       prepared.commit();natureActive=nature;if(!nature)botanical.stop();
       natureRoom.setActive(nature&&entered);
+      nightFinish.setActive(!nature);
       if(title){drawEntrySign(entrySign.image.getContext('2d'),title);entrySign.needsUpdate=true;}
       const destination=nature?'night':'nature';
       panelFace.userData.destination=destination;panelMaterial.map=panelTextures[destination];
@@ -358,7 +368,7 @@ export async function createGalleryScene(container, works, callbacks = {}) {
   }
   function home(){
     if(questBusy())return;
-    cancelExhibition();botanical.stop();natureRoom.setActive(false);doorShadow.reset();
+    cancelExhibition();botanical.stop();natureRoom.setActive(false);doorShadow.reset();sound.reset();
     entryJourney=null;journey=null;arcadeJourney=null;tween=null;lastFrame=null;entered=false;selected=-1;drag=null;area='gallery';claw.close();cafe.reset();notifyCafe();notifyArcade();
     leftDoor.rotation.y=rightDoor.rotation.y=0;camera.fov=container.getBoundingClientRect().width<700?59:55;camera.updateProjectionMatrix();canvas.style.cursor=ready?'pointer':'wait';
     canvas.setAttribute('aria-label','入口のガラス扉。クリック、またはEnterキーで写真展に入る。');
@@ -490,15 +500,16 @@ export async function createGalleryScene(container, works, callbacks = {}) {
     if(ready&&!entered&&!entryJourney&&(event.key==='Enter'||event.key===' ')){event.preventDefault();callbacks.onEnterRequest?.();}
     else if(entered&&area==='arcade'&&(event.key==='Enter'||event.key===' ')){event.preventDefault();startClaw();}
   });
-  canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();lost=true;tween=null;lastFrame=null;if(exhibitionJourney){if(!exhibitionJourney.committed)exhibitionJourney.commit();const resolve=exhibitionJourney.resolve;exhibitionJourney=null;resolve();}callbacks.onContextLost?.();});
-  canvas.addEventListener('webglcontextrestored',()=>{lost=false;lastFrame=null;callbacks.onContextRestored?.();requestFrame();});
+  canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();lost=true;tween=null;lastFrame=null;sound.setSuspended(true);if(exhibitionJourney){if(!exhibitionJourney.committed)exhibitionJourney.commit();const resolve=exhibitionJourney.resolve;exhibitionJourney=null;resolve();}callbacks.onContextLost?.();});
+  canvas.addEventListener('webglcontextrestored',()=>{lost=false;lastFrame=null;sound.setSuspended(suspended);callbacks.onContextRestored?.();requestFrame();});
   const resize=()=>{const {width,height}=container.getBoundingClientRect();renderer.setSize(width,height);cafe.resize(width,height);camera.aspect=width/Math.max(1,height);camera.fov=area==='arcade'?68:width<700?59:55;camera.updateProjectionMatrix();if(!entered&&!entryJourney)home();else if(selected>=0&&!entryJourney&&!journey)focus(selected,true);requestFrame();};
   const observer=new ResizeObserver(resize);observer.observe(container);
   resize();
   await Promise.all(loadTasks);
   ready=true;canvas.style.cursor='pointer';requestFrame();
   return {focus,overview,enter,home,visitCafe,leaveCafe,faceCafeDoor,pourCoffee,sipCoffee,replaceWorks,transitionExhibition,visitArcade,leaveArcade,startClaw,closeClaw,moveClaw,nudgeClaw,stopClaw,grabClaw,collectPrize,exchangePin,exitArcade,
-    setSuspended(value){suspended=value;lastFrame=null;if(value)claw.stopMove(true);else requestFrame();},
-    dispose(){cancelExhibition();doorShadow.dispose();claw.dispose();arcadeHall.dispose();quest.dispose();botanical.dispose();natureRoom.dispose();motionPreference.removeEventListener?.('change',onMotionChange);observer.disconnect();cancelAnimationFrame(raf);disposables.forEach(x=>x.dispose());renderer.dispose();canvas.remove();},
+    unlockAudio(){sound.unlock();},setSoundEnabled(value){sound.setEnabled(value);requestFrame();},
+    setSuspended(value){suspended=value;lastFrame=null;sound.setSuspended(value||lost);if(value)claw.stopMove(true);else requestFrame();},
+    dispose(){cancelExhibition();sound.dispose();doorShadow.dispose();claw.dispose();arcadeHall.dispose();quest.dispose();botanical.dispose();natureRoom.dispose();nightFinish.dispose();motionPreference.removeEventListener?.('change',onMotionChange);observer.disconnect();cancelAnimationFrame(raf);disposables.forEach(x=>x.dispose());renderer.dispose();canvas.remove();},
   };
 }

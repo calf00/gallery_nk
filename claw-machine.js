@@ -206,8 +206,10 @@ export function createClawMachine({ scene, onState = () => {}, onWin = () => {} 
     if (!inGame || phase !== 'aiming' || disposed) return false;
     stopMove(); caught = false; setPhase('dropping'); return true;
   }
+  let moving = false;
   function tick(deltaMs) {
     if (disposed) return false;
+    const beforeX=trolley.position.x,beforeZ=trolley.position.z,beforeY=head.position.y;
     let dt = Number.isFinite(deltaMs) ? Math.max(0, deltaMs) : 0;
     // Substeps make fast tests, low frame rates, and all phase boundaries deterministic.
     while (dt > 0) {
@@ -248,6 +250,7 @@ export function createClawMachine({ scene, onState = () => {}, onWin = () => {} 
       }
       pose();
     }
+    moving = Math.abs(trolley.position.x-beforeX)+Math.abs(trolley.position.z-beforeZ)+Math.abs(head.position.y-beforeY) > .000001;
     return joystickAnimating || ['dropping', 'lifting', 'returning', 'releasing'].includes(phase) || (phase === 'aiming' && inGame && !!(axes.x || axes.z));
   }
   function close() {
@@ -267,5 +270,5 @@ export function createClawMachine({ scene, onState = () => {}, onWin = () => {} 
   home();
   return { group, hitTarget, prizeTarget, takePrize, start, move, grab, tick, stopMove, close, reset, dispose,
     get prizeAvailable() { return phase === 'won' && !prizeCollected && !disposed; },
-    get state() { return phase; }, get inGame() { return inGame; } };
+    get state() { return phase; }, get inGame() { return inGame; }, get moving() { return moving; } };
 }

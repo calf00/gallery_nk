@@ -2,18 +2,41 @@ import { room, placement } from './config.js?v=20260913-garden';
 import { collections } from './collections.js?v=20260913-garden';
 let collectionKey='night', activeCollection=collections.night, descriptions=activeCollection.descriptions, locations=activeCollection.locations, switching=false;
 const $=id=>document.getElementById(id);
-const gallery=$('gallery'), indexDialog=$('index-dialog'), viewer=$('viewer-dialog');
+const gallery=$('gallery'), indexDialog=$('index-dialog'), viewer=$('viewer-dialog'), infoDialog=$('info-dialog');
 const pad=n=>String(n).padStart(2,'0');
 let works=[], scene=null, selected=-1, viewerIndex=0, entered=false, entering=false, sceneFailed=false;
 let noticeTimer,cafeArea='gallery',cafeBusy=false,coffeeState='empty';
 let arcadeArea='gallery',arcadeBusy=false,clawState={phase:'idle',inGame:false,canMove:false,canGrab:false};
 let questState={phase:'empty',item:null,busy:false,escaped:false};
+const backgroundMusic=$('gallery-music');
+backgroundMusic.volume=.22;
+let musicStarted=false;
+function syncMusic(){
+  if(musicStarted&&soundEnabled&&!document.hidden&&!questState.escaped){
+    if(backgroundMusic.paused)backgroundMusic.play().catch(()=>{});
+  }else backgroundMusic.pause();
+}
 function announce(text){$('notice').textContent=text;$('notice').hidden=false;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>{$('notice').hidden=true;},4200);}
-function syncSuspend(){scene?.setSuspended(document.hidden||indexDialog.open||viewer.open);}
+function syncSuspend(){scene?.setSuspended(document.hidden||indexDialog.open||viewer.open||infoDialog.open);syncMusic();}
+let soundEnabled=true;
+const soundButton=$('sound-toggle');
+soundButton.hidden=!(window.AudioContext||window.webkitAudioContext||backgroundMusic.canPlayType('audio/mpeg'));
+function unlockSound(event){if(event.isTrusted){scene?.unlockAudio();syncMusic();}}
+document.addEventListener('pointerdown',unlockSound,{capture:true,passive:true});
+document.addEventListener('keydown',unlockSound,{capture:true});
+soundButton.addEventListener('click',()=>{
+  soundEnabled=!soundEnabled;scene?.setSoundEnabled(soundEnabled);
+  soundButton.setAttribute('aria-pressed',String(soundEnabled));
+  soundButton.setAttribute('aria-label',soundEnabled?'音を消す':'音を出す');
+  soundButton.title=soundEnabled?'音を消す':'音を出す';
+  $('sound-label').textContent=soundEnabled?'音 ON':'音 OFF';
+  syncMusic();
+});
 function showIndex(){if(switching||arcadeBusy||clawState.inGame||questState.busy||questState.escaped)return;if(!works.length){location.href='./photos.html';return;}indexDialog.showModal();syncSuspend();}
 $('index-button').addEventListener('click',showIndex);
+$('info-button').addEventListener('click',()=>{stopClawInput();infoDialog.showModal();syncSuspend();});
 for(const button of document.querySelectorAll('[data-close]'))button.addEventListener('click',()=>$(button.dataset.close).close());
-for(const dialog of [indexDialog,viewer]) {
+for(const dialog of [indexDialog,viewer,infoDialog]) {
   dialog.addEventListener('close',syncSuspend);
   dialog.addEventListener('click',event=>{if(event.target!==dialog)return;const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)dialog.close();});
 }
@@ -21,6 +44,7 @@ document.addEventListener('visibilitychange',syncSuspend);
 function enter(){
   if(entered||entering||switching)return;
   if(sceneFailed||!scene){showIndex();return;}
+  musicStarted=true;syncMusic();
   entering=true;gallery.classList.add('entering');$('intro').inert=true;
   $('enter-button').disabled=true;$('index-button').disabled=true;
   $('entry-status').hidden=false;scene.enter();
@@ -34,6 +58,7 @@ function finishEntry(){
 $('enter-button').addEventListener('click',enter);
 $('home-button').addEventListener('click',()=>{
   if(questState.busy||questState.escaped)return;
+  musicStarted=false;syncMusic();backgroundMusic.currentTime=0;
   entered=false;entering=false;selected=-1;gallery.classList.remove('entered','entering');gallery.classList.add('welcome');
   $('tour-ui').hidden=true;$('entry-status').hidden=true;$('intro').inert=false;
   $('enter-button').disabled=!scene&&!sceneFailed;$('index-button').disabled=false;
@@ -96,6 +121,7 @@ function applyClawInput(){
 function stopClawInput(){clawHeld.clear();clawKeys.clear();scene?.stopClaw();for(const button of document.querySelectorAll('[data-claw-axis]'))button.classList.remove('held');}
 function syncQuest(state){
   questState=state;gallery.classList.toggle('quest-busy',state.busy);gallery.classList.toggle('escaped',state.escaped);
+  if(state.escaped)syncMusic();
   $('held-item').hidden=!state.item;$('held-pin').toggleAttribute('hidden',state.item!=='pin');$('held-key').toggleAttribute('hidden',state.item!=='key');
   $('held-item-label').textContent=state.item==='key'?'鍵':'ピン';
   $('held-item').setAttribute('aria-label',state.item==='key'?'持っている鍵':'持っているピン');
@@ -150,7 +176,7 @@ for(const button of document.querySelectorAll('[data-claw-axis]')){
 }
 const clawArrowKeys={ArrowLeft:{axis:'x',direction:-1},ArrowRight:{axis:'x',direction:1},ArrowUp:{axis:'z',direction:-1},ArrowDown:{axis:'z',direction:1}};
 window.addEventListener('keydown',event=>{
-  if(!clawState.inGame||event.altKey||event.ctrlKey||event.metaKey)return;
+  if(infoDialog.open||!clawState.inGame||event.altKey||event.ctrlKey||event.metaKey)return;
   if(clawArrowKeys[event.key]){event.preventDefault();if(clawState.canMove){clawKeys.set(event.key,clawArrowKeys[event.key]);applyClawInput();}}
   if(event.key==='Escape'&&!$('claw-close').disabled){event.preventDefault();scene?.closeClaw();}
 });
@@ -188,7 +214,7 @@ $('viewer-image').addEventListener('error',()=>{$('viewer-error').hidden=false;$
 $('retry-image').addEventListener('click',()=>displayPhoto(viewerIndex));
 $('zoom-button').addEventListener('click',()=>{const zoomed=$('viewer-stage').classList.toggle('zoomed');$('zoom-button').setAttribute('aria-pressed',String(zoomed));$('zoom-button').textContent=zoomed?'全体を見る −':'拡大する ＋';});
 window.addEventListener('keydown',event=>{
-  if(event.altKey||event.ctrlKey||event.metaKey||event.shiftKey)return;
+  if(infoDialog.open||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey)return;
   if(event.key!=='ArrowRight'&&event.key!=='ArrowLeft')return;
   if(viewer.open){if($('viewer-stage').classList.contains('zoomed'))return;event.preventDefault();stepViewer(event.key==='ArrowRight'?1:-1);}
   else if(entered&&!indexDialog.open&&!switching&&!cafeBusy&&!arcadeBusy&&!clawState.inGame&&arcadeArea!=='arcade'&&cafeArea!=='cafe'){event.preventDefault();selectWork(selected+(event.key==='ArrowRight'?1:-1));}
@@ -199,7 +225,7 @@ async function init(){
     const response=await fetch('./assets/manifest.json');if(!response.ok)throw new Error('manifest');works=await response.json();if(works.length!==12)throw new Error('count');buildCollection();
     const slow=setTimeout(()=>{$('load-status').textContent='読み込み中です。右上の作品一覧からも鑑賞できます。';},10000);
     try{
-      const {createGalleryScene}=await import('./scene.js?v=20260913-ivy');
+      const {createGalleryScene}=await import('./scene.js?v=20260913-walking');
       scene=await createGalleryScene($('scene'),works,{
         onProgress(n,total){$('load-status').textContent=`展示室を準備中 ${n} / ${total}`;},
         onEnterRequest:enter,
@@ -230,7 +256,7 @@ async function init(){
         onContextLost(){sceneFailed=true;$('index-button').disabled=false;if(entering){scene.home();entering=false;gallery.classList.remove('entering');$('intro').inert=false;$('entry-status').hidden=true;$('enter-button').disabled=false;$('index-button').disabled=false;}announce('3D表示が中断しました。作品一覧から写真を見られます。');},
         onContextRestored(){sceneFailed=false;$('index-button').disabled=cafeBusy;announce('3D表示が復帰しました。');},
       });
-      syncSuspend();$('enter-button').disabled=false;$('enter-text').textContent='扉を開けて入る';$('load-status').textContent='扉をクリックして、写真展へ。';
+      syncSuspend();soundButton.disabled=false;$('enter-button').disabled=false;$('enter-text').textContent='扉を開けて入る';$('load-status').textContent='扉をクリックして、写真展へ。';
     }catch(error){console.error('3D gallery unavailable:',error);fallback('この端末では写真一覧でお楽しみください。');}finally{clearTimeout(slow);}
   }catch(error){console.error('Gallery loading failed:',error);fallback('写真一覧を開いてお楽しみください。');}
 }

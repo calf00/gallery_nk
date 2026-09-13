@@ -1,4 +1,4 @@
-/** Reversible grass flooring and a few wall-clinging vines for NATURE MODE. */
+/** Reversible grass, wall ivy and low woodland planting for NATURE MODE. */
 export function createNatureRoom({ THREE, scene, room }) {
   const group = new THREE.Group(); group.name = 'nature-room'; group.visible = false; scene.add(group);
   const resources = new Set(), own = resource => (resources.add(resource), resource);
@@ -231,10 +231,145 @@ export function createNatureRoom({ THREE, scene, room }) {
   leaves.instanceMatrix.needsUpdate = true; leaves.instanceColor.needsUpdate = true;
   leaves.computeBoundingBox(); leaves.computeBoundingSphere();
 
+  // Three small woodland pockets leave the central route and every A2 print clear.
+  // All dressing stays below knee height, with shared geometry and no new lights.
+  const woodland = new THREE.Group(); woodland.name = 'nature-woodland-pockets'; group.add(woodland);
+  const groundRandom = random(83147), groundBatches = [];
+  const sites = [{ x: -1.94, z: -4.14 }, { x: 1.94, z: 1.03 }, { x: -1.94, z: 3.06 }];
+  const ground = -.002;
+  function batch(name, geometry, surface, placements) {
+    const result = new THREE.InstancedMesh(own(geometry), surface, placements.length);
+    result.name = name; result.receiveShadow = true; woodland.add(result); groundBatches.push(result);
+    for (const [i, item] of placements.entries()) {
+      transform.position.set(...item.position); transform.rotation.set(...(item.rotation || [0, 0, 0]));
+      transform.scale.set(...item.scale); transform.updateMatrix();
+      result.setMatrixAt(i, transform.matrix);
+      result.setColorAt(i, new THREE.Color(item.color || '#ffffff'));
+    }
+    result.instanceMatrix.needsUpdate = true; result.instanceColor.needsUpdate = true;
+    result.computeBoundingBox(); result.computeBoundingSphere();
+    return result;
+  }
+
+  // A flattened, irregular stone with moss following its upper surface.
+  const stoneGeometry = new THREE.SphereGeometry(1, 20, 12);
+  const stonePoints = stoneGeometry.attributes.position, stoneColors = [];
+  for (let i = 0; i < stonePoints.count; i++) {
+    const x = stonePoints.getX(i), y = stonePoints.getY(i), z = stonePoints.getZ(i);
+    const relief = 1 + .075 * Math.sin(x * 7 + z * 5) + .055 * Math.sin(z * 11 - y * 4);
+    stonePoints.setXYZ(i, x * relief, Math.max(-.64, y * relief), z * relief);
+    const moss = THREE.MathUtils.smoothstep(y + .17 * Math.sin(x * 8 + z * 11), .12, .72);
+    const color = new THREE.Color('#6f7569').lerp(new THREE.Color('#6f8145'), moss);
+    color.multiplyScalar(.87 + .13 * Math.sin(x * 23 + y * 17) * Math.sin(z * 19 - y * 13));
+    stoneColors.push(color.r, color.g, color.b);
+  }
+  stoneGeometry.computeBoundingBox();
+  const stoneBox = stoneGeometry.boundingBox, stoneSize = stoneBox.getSize(new THREE.Vector3());
+  for (let i = 0; i < stonePoints.count; i++) stonePoints.setXYZ(i,
+    (stonePoints.getX(i) - stoneBox.min.x) / stoneSize.x - .5,
+    (stonePoints.getY(i) - stoneBox.min.y) / stoneSize.y,
+    (stonePoints.getZ(i) - stoneBox.min.z) / stoneSize.z - .5);
+  stoneGeometry.setAttribute('color', new THREE.Float32BufferAttribute(stoneColors, 3));
+  stoneGeometry.computeVertexNormals(); stoneGeometry.computeBoundingBox(); stoneGeometry.computeBoundingSphere();
+  const stonePlacements = [], capPlacements = [], stalkPlacements = [], leafletPlacements = [];
+  const frondVertices = [], frondNormals = [];
+  function appendFrond(curve) {
+    const tube = new THREE.TubeGeometry(curve, 10, .0015, 4, false);
+    const positions = tube.attributes.position, normals = tube.attributes.normal;
+    for (const index of tube.index.array) {
+      frondVertices.push(positions.getX(index), positions.getY(index), positions.getZ(index));
+      frondNormals.push(normals.getX(index), normals.getY(index), normals.getZ(index));
+    }
+    tube.dispose();
+  }
+  for (const [siteIndex, site] of sites.entries()) {
+    const side = Math.sign(site.x);
+    for (const [dx, dz, w, h, d] of [[0, 0, .42, .19, .31], [-.15, .19, .20, .09, .16], [.14, -.17, .14, .065, .11]]) {
+      stonePlacements.push({ position: [site.x + side * dx, ground, site.z + dz],
+        scale: [w, h, d], rotation: [0, (groundRandom() - .5) * .8, 0] });
+    }
+    // Seven arching fronds, with paired tapered leaflets and a visible midrib.
+    const base = new THREE.Vector3(site.x + side * .025, ground + .004, site.z + .20);
+    for (let frond = 0; frond < 7; frond++) {
+      const angle = frond / 7 * Math.PI * 2 + siteIndex * .7;
+      const reach = .17 + groundRandom() * .055, height = .24 + groundRandom() * .13;
+      const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+      const curve = new THREE.CatmullRomCurve3([base.clone(),
+        base.clone().addScaledVector(radial, reach * .12).add(new THREE.Vector3(0, height * .55, 0)),
+        base.clone().addScaledVector(radial, reach * .60).add(new THREE.Vector3(0, height, 0)),
+        base.clone().addScaledVector(radial, reach).add(new THREE.Vector3(0, height * .80, 0))]);
+      appendFrond(curve);
+      for (let pair = 0; pair < 11; pair++) for (const direction of [-1, 1]) {
+        const t = .20 + pair / 11 * .77 + (direction > 0 ? .012 : 0);
+        const point = curve.getPoint(t);
+        const size = .009 + .057 * Math.pow(Math.sin(Math.PI * (t - .08)), .9) * (1 - t * .58);
+        leafletPlacements.push({ position: point.toArray(),
+          rotation: [0, -angle - direction * 1.04, .09 + (1 - t) * .42],
+          scale: [size, size, size * (.86 + groundRandom() * .16)],
+          color: ['#527647', '#709256', '#8da961'][Math.floor(groundRandom() * 3)] });
+      }
+    }
+    // Small ochre caps are a detail to discover, not another focal object.
+    for (const [dx, dz, height, radius] of [[-.18, -.12, .11, .050], [-.22, -.035, .074, .038], [-.12, -.20, .058, .030]]) {
+      const position = [site.x + side * dx, ground, site.z + dz];
+      stalkPlacements.push({ position, scale: [radius * .21, height, radius * .21] });
+      capPlacements.push({ position: [position[0], ground + height, position[2]], scale: [radius, radius * .67, radius],
+        rotation: [0, groundRandom() * Math.PI * 2, 0], color: ['#b49a6a', '#9d8154', '#c5ad7a'][siteIndex] });
+    }
+  }
+  batch('nature-moss-stones', stoneGeometry, material('#ffffff', { vertexColors: true }), stonePlacements);
+
+  // A cupped, pointed leaflet. Its raised center catches light without alpha cards.
+  const leafletVertices = [], leafletIndices = [];
+  for (let row = 0; row <= 5; row++) {
+    const t = row / 5, width = .20 * Math.pow(Math.sin(t * Math.PI), .8);
+    for (const cross of [-1, 0, 1]) leafletVertices.push(t,
+      Math.sin(t * Math.PI) * (.085 - Math.abs(cross) * .065), cross * width);
+    if (row < 5) for (let col = 0; col < 2; col++) {
+      const a = row * 3 + col; leafletIndices.push(a, a + 3, a + 1, a + 1, a + 3, a + 4);
+    }
+  }
+  const leafletGeometry = new THREE.BufferGeometry();
+  leafletGeometry.setAttribute('position', new THREE.Float32BufferAttribute(leafletVertices, 3));
+  leafletGeometry.setIndex(leafletIndices); leafletGeometry.computeVertexNormals();
+  batch('nature-fern-leaflets', leafletGeometry, material('#ffffff', { side: THREE.DoubleSide, roughness: .82 }), leafletPlacements);
+  const frondGeometry = new THREE.BufferGeometry();
+  frondGeometry.setAttribute('position', new THREE.Float32BufferAttribute(frondVertices, 3));
+  frondGeometry.setAttribute('normal', new THREE.Float32BufferAttribute(frondNormals, 3));
+  const fronds = mesh('nature-fern-midribs', frondGeometry, material('#7d8f51')); woodland.add(fronds);
+
+  const capProfile = [[0, -.065], [.24, -.07], [.57, -.04], [.86, .015], [1, .10],
+    [.94, .23], [.77, .49], [.47, .70], [.16, .79], [0, .8]].map(([r, y]) => new THREE.Vector2(r, y));
+  const capGeometry = new THREE.LatheGeometry(capProfile, 20), capColors = [];
+  const capPoints = capGeometry.attributes.position;
+  for (let i = 0; i < capPoints.count; i++) {
+    const y = capPoints.getY(i), shade = y < .02 ? .68 : .90 + .08 * Math.sin(capPoints.getX(i) * 17 + capPoints.getZ(i) * 21);
+    capColors.push(shade, shade, shade);
+  }
+  capGeometry.setAttribute('color', new THREE.Float32BufferAttribute(capColors, 3));
+  batch('nature-mushroom-caps', capGeometry, material('#ffffff', { vertexColors: true, roughness: .82 }), capPlacements);
+  const stalkGeometry = new THREE.CylinderGeometry(.68, 1, 1, 9, 2); stalkGeometry.translate(0, .5, 0);
+  batch('nature-mushroom-stalks', stalkGeometry, material('#d7c9a5'), stalkPlacements);
+
+  // A soft contact shadow beds each pocket into the grass without a light or animation.
+  if (typeof document !== 'undefined') {
+    const canvas = document.createElement('canvas'); canvas.width = canvas.height = 128;
+    const context = canvas.getContext('2d');
+    if (context) {
+      const wash = context.createRadialGradient(64, 64, 9, 64, 64, 62);
+      wash.addColorStop(0, '#18241685'); wash.addColorStop(.5, '#1d2d1b45'); wash.addColorStop(1, '#1d2d1b00');
+      context.fillStyle = wash; context.fillRect(0, 0, 128, 128);
+      const map = own(new THREE.CanvasTexture(canvas)); map.colorSpace = THREE.SRGBColorSpace;
+      const surface = own(new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, toneMapped: false }));
+      batch('nature-woodland-contact', new THREE.PlaneGeometry(1, 1), surface,
+        sites.map(site => ({ position: [site.x, -.0029, site.z + .06], rotation: [-Math.PI / 2, 0, 0], scale: [.70, .78, 1] })));
+    }
+  }
+
   return { group, setActive(active) { if (!disposed) group.visible = Boolean(active); }, dispose() {
     if (disposed) return;
     disposed = true; group.visible = false; group.removeFromParent();
-    grass.dispose(); leaves.dispose();
+    grass.dispose(); leaves.dispose(); groundBatches.forEach(batch => batch.dispose());
     for (const resource of resources) resource.dispose(); resources.clear();
   } };
 }
