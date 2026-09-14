@@ -1,5 +1,5 @@
 import { room, placement } from './config.js?v=20260913-garden';
-import { collections } from './collections.js?v=20260913-garden';
+import { collections } from './collections.js?v=20260914-locations';
 let collectionKey='night', activeCollection=collections.night, descriptions=activeCollection.descriptions, locations=activeCollection.locations, switching=false;
 const $=id=>document.getElementById(id);
 const gallery=$('gallery'), indexDialog=$('index-dialog'), viewer=$('viewer-dialog'), infoDialog=$('info-dialog');
